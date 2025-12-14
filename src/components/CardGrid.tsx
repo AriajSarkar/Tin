@@ -115,45 +115,46 @@ export function CardGrid({
                             background: colors.bg.raised,
                             borderTop: `1px solid ${colors.border.subtle}`,
                             boxShadow: "0 -4px 20px rgba(0,0,0,0.2)",
+                            paddingBottom: "env(safe-area-inset-bottom, 16px)", // Respect home indicator
                         }}
                     >
-                        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+                        <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
                             {/* Left: Count and Select/Deselect */}
                             <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-2">
-                                    <RiCheckboxMultipleLine size={16} style={{ color: colors.accent.primary }} />
+                                    <div className="hidden sm:block">
+                                        <RiCheckboxMultipleLine size={18} style={{ color: colors.accent.primary }} />
+                                    </div>
                                     <span
-                                        className="text-sm font-medium"
+                                        className="text-sm font-semibold"
                                         style={{ color: colors.text.primary }}
                                     >
-                                        {selectedCount} selected
+                                        {selectedCount} <span className="hidden sm:inline">selected</span>
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={allSelected ? onDeselectAll : onSelectAll}
-                                        className="px-2 py-1 text-xs rounded-md cursor-pointer transition-colors"
-                                        style={{ color: colors.accent.primary }}
-                                        onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.hover}
-                                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                                    >
-                                        {allSelected ? "Deselect All" : "Select All"}
-                                    </button>
-                                </div>
+                                <div className="h-4 w-[1px] bg-gray-200 dark:bg-gray-700 mx-1 hidden sm:block" />
+                                <button
+                                    onClick={allSelected ? onDeselectAll : onSelectAll}
+                                    className="text-xs font-medium px-2 py-1.5 rounded-md cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+                                    style={{ color: colors.accent.primary }}
+                                >
+                                    {allSelected ? "Deselect All" : "Select All"}
+                                </button>
                             </div>
 
                             {/* Right: Action buttons */}
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-shrink-0">
                                 <motion.button
                                     whileTap={{ scale: 0.97 }}
                                     onClick={onExitSelectionMode}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors"
-                                    style={{ color: colors.text.secondary }}
+                                    className="flex items-center gap-1.5 p-2 sm:px-3 sm:py-1.5 rounded-lg text-xs cursor-pointer transition-colors"
+                                    style={{ color: colors.text.tertiary }}
                                     onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.hover}
                                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                    title="Cancel"
                                 >
-                                    <RiCloseLine size={14} />
-                                    Cancel
+                                    <span className="hidden sm:inline">Cancel</span>
+                                    <span className="sm:hidden"><RiCloseLine size={18} /></span>
                                 </motion.button>
 
                                 {(selectionAction === "move" || selectionAction === null) && (
@@ -161,21 +162,24 @@ export function CardGrid({
                                         whileTap={{ scale: 0.97 }}
                                         onClick={isSavedTab ? onMoveToRecent : onMoveToSaved}
                                         disabled={selectedCount === 0}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                                         style={{
-                                            background: colors.accent.muted,
-                                            color: colors.accent.primary,
+                                            background: selectedCount > 0 ? colors.accent.primary : colors.bg.surface,
+                                            color: selectedCount > 0 ? "#fff" : colors.text.tertiary,
+                                            boxShadow: selectedCount > 0 ? "0 2px 8px " + colors.accent.primary + "50" : "none",
                                         }}
                                     >
                                         {isSavedTab ? (
                                             <>
                                                 <RiInboxUnarchiveLine size={14} />
-                                                Move to Recent
+                                                <span className="hidden sm:inline">Move to Recent</span>
+                                                <span className="sm:hidden">Restore</span>
                                             </>
                                         ) : (
                                             <>
                                                 <RiArchiveLine size={14} />
-                                                Move to Saved
+                                                <span className="hidden sm:inline">Move to Saved</span>
+                                                <span className="sm:hidden">Move</span>
                                             </>
                                         )}
                                     </motion.button>
@@ -186,14 +190,16 @@ export function CardGrid({
                                         whileTap={{ scale: 0.97 }}
                                         onClick={onDeleteSelected}
                                         disabled={selectedCount === 0}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                                         style={{
-                                            background: colors.status.negative + "20",
-                                            color: colors.status.negative,
+                                            background: selectedCount > 0 ? colors.status.negative : colors.bg.surface,
+                                            color: selectedCount > 0 ? "#fff" : colors.text.tertiary,
+                                            boxShadow: selectedCount > 0 ? "0 2px 8px " + colors.status.negative + "50" : "none",
                                         }}
                                     >
                                         <RiDeleteBinLine size={14} />
-                                        Delete
+                                        <span className="hidden sm:inline">Delete Selected</span>
+                                        <span className="sm:hidden">Delete</span>
                                     </motion.button>
                                 )}
                             </div>

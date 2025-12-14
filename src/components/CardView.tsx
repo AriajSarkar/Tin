@@ -160,6 +160,7 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                 style={{
                     background: colors.bg.base,
                     borderBottom: `1px solid ${colors.border.subtle}`,
+                    paddingTop: "env(safe-area-inset-top, 0px)", // Respect status bar
                 }}
             >
                 <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
