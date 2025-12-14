@@ -2,6 +2,7 @@
 
 import { motion } from "motion/react";
 import type { Card } from "@/lib/types";
+import { useCurrency } from "@/hooks/useCurrency";
 import { RiDeleteBinLine, RiCheckboxCircleFill, RiCheckboxBlankCircleLine } from "@remixicon/react";
 import Decimal from "decimal.js";
 import { colors } from "@/styles/tokens";
@@ -32,6 +33,7 @@ export function CardItem({
     isSelected = false,
     onToggleSelect,
 }: CardItemProps) {
+    const { symbol } = useCurrency();
     const amount = safeDecimal(card.amount);
     const isNegative = amount.isNegative();
     const formattedAmount = amount.toFixed(2);
@@ -154,7 +156,7 @@ export function CardItem({
                         className="text-xs"
                         style={{ color: colors.text.tertiary }}
                     >
-                        $
+                        {symbol}
                     </span>
                     <span
                         className="text-xl font-medium tabular-nums tracking-tight"

@@ -3,6 +3,8 @@
 import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { CardWithTodos, Todo } from "@/lib/types";
+import { useCurrency } from "@/hooks/useCurrency";
+import { CurrencySelector } from "./CurrencySelector";
 import { TodoItem } from "./TodoItem";
 import { RiArrowLeftLine, RiAddLine } from "@remixicon/react";
 import Decimal from "decimal.js";
@@ -37,6 +39,8 @@ interface CardViewProps {
 }
 
 export function CardView({ card, onBack, onUpdate }: CardViewProps) {
+    const { currency, setCurrency, symbol, allCurrencies } = useCurrency();
+    const [showCurrencySelector, setShowCurrencySelector] = useState(false);
     const [title, setTitle] = useState(card.title || "");
     const [amount, setAmount] = useState(formatAmount(card.amount));
     const [todos, setTodos] = useState<Todo[]>(card.todos);
@@ -203,16 +207,18 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                         Main Balance
                     </label>
                     <div className="flex items-baseline gap-1.5">
-                        <span
-                            className="text-xl"
+                        <button
+                            onClick={() => setShowCurrencySelector(true)}
+                            className="text-xl font-medium cursor-pointer hover:opacity-80 transition-opacity px-1 -ml-1 rounded flex items-center gap-1"
                             style={{ color: colors.text.tertiary }}
+                            title="Click to change currency"
                         >
-                            $
-                        </span>
+                            {symbol}
+                        </button>
                         <input
                             type="text"
                             inputMode="decimal"
-                            value={amount}
+                            value={amount === "0" || amount === "0.00" ? "" : amount}
                             onChange={handleAmountChange}
                             onBlur={handleAmountBlur}
                             placeholder="0.00"
@@ -420,7 +426,7 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                             className="font-medium tabular-nums"
                             style={{ color: colors.text.primary }}
                         >
-                            ${totalDeducted.toFixed(2)}
+                            {symbol}{totalDeducted.toFixed(2)}
                         </span>
                     </div>
                     <div
@@ -437,11 +443,19 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                                     : colors.status.positive,
                             }}
                         >
-                            ${remaining.toFixed(2)}
+                            {symbol}{remaining.toFixed(2)}
                         </span>
                     </div>
                 </motion.section>
             </main>
-        </motion.div>
+
+            <CurrencySelector
+                isOpen={showCurrencySelector}
+                onClose={() => setShowCurrencySelector(false)}
+                onSelect={setCurrency}
+                currentCurrency={currency}
+                allCurrencies={allCurrencies}
+            />
+        </motion.div >
     );
 }

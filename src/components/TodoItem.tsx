@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Todo } from "@/lib/types";
+import { useCurrency } from "@/hooks/useCurrency";
 import { RiCheckLine, RiEditLine, RiDeleteBinLine, RiTimeLine, RiCloseLine, RiCheckDoubleLine } from "@remixicon/react";
 import { colors } from "@/styles/tokens";
 
@@ -86,7 +87,8 @@ export function TodoItem({ todo, onToggle, onEdit, onDelete }: TodoItemProps) {
         }
     }, [handleSaveEdit, handleCancelEdit]);
 
-    const formattedAmount = todo.amount ? `$${parseFloat(todo.amount).toFixed(2)}` : null;
+    const { symbol } = useCurrency();
+    const formattedAmount = todo.amount ? `${symbol}${parseFloat(todo.amount).toFixed(2)}` : null;
     const formattedDate = todo.scheduled_at
         ? new Date(todo.scheduled_at).toLocaleDateString()
         : null;

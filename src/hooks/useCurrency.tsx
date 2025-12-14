@@ -92,6 +92,7 @@ function detectSystemCurrency(): string {
 interface CurrencyContextType {
     currency: string;
     setCurrency: (code: string) => void;
+    cycleCurrency: () => void;
     symbol: string;
     format: (amount: number | string) => string;
     allCurrencies: CurrencyInfo[];
@@ -148,9 +149,20 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
         [currency, locale]
     );
 
+    // Cycle through all currencies
+    const cycleCurrency = useCallback(() => {
+        if (allCurrencies.length === 0) return;
+
+        const currentIndex = allCurrencies.findIndex(c => c.code === currency);
+        // If not found, start from 0, otherwise go to next
+        const nextIndex = (currentIndex + 1) % allCurrencies.length;
+        setCurrency(allCurrencies[nextIndex].code);
+    }, [currency, setCurrency, allCurrencies]);
+
     const value: CurrencyContextType = {
         currency,
         setCurrency,
+        cycleCurrency,
         symbol,
         format,
         allCurrencies,
