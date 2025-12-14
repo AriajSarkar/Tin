@@ -63,6 +63,23 @@ export default function Home() {
     }
   }, []);
 
+  // Restore active card from persistence on mount
+  useEffect(() => {
+    const restoreActiveCard = async () => {
+      const persistedId = localStorage.getItem("activeCardId");
+      if (persistedId) {
+        try {
+          const fullCard = await api.getCard(persistedId);
+          setSelectedCard(fullCard);
+        } catch (error) {
+          console.error("Failed to restore card:", error);
+          localStorage.removeItem("activeCardId");
+        }
+      }
+    };
+    restoreActiveCard();
+  }, []);
+
   const loadArchivedCards = useCallback(async () => {
     try {
       const archivedData = await api.listArchivedCards();
@@ -113,6 +130,7 @@ export default function Home() {
       setCards((prev) => [newCard, ...prev]);
       const fullCard = await api.getCard(newCard.id);
       setSelectedCard(fullCard);
+      localStorage.setItem("activeCardId", newCard.id);
     } catch (error) {
       console.error("Failed to create card:", error);
     }
@@ -122,6 +140,7 @@ export default function Home() {
     try {
       const fullCard = await api.getCard(cardId);
       setSelectedCard(fullCard);
+      localStorage.setItem("activeCardId", cardId);
     } catch (error) {
       console.error("Failed to load card:", error);
     }
@@ -139,6 +158,11 @@ export default function Home() {
         try {
           await api.deleteCard(cardId);
           setCards((prev) => prev.filter((c) => c.id !== cardId));
+          // If the deleted card was active (shouldn't happen in this view but good safety)
+          if (selectedCard?.id === cardId) {
+            setSelectedCard(null);
+            localStorage.removeItem("activeCardId");
+          }
         } catch (error) {
           console.error("Failed to delete card:", error);
         }
@@ -150,6 +174,7 @@ export default function Home() {
 
   const handleBack = useCallback(() => {
     setSelectedCard(null);
+    localStorage.removeItem("activeCardId");
     loadData();
   }, [loadData]);
 
