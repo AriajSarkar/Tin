@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tin – Local-First Expense Tracker
 
-## Getting Started
+A notebook-like Tauri app for tracking expenses with cards containing todo items.
 
-First, run the development server:
+## Features
+
+- **Cards**: Create expense cards with a main balance
+- **Todos**: Add items that atomically deduct from the card balance
+- **Search**: Full-text search across cards and todos (FTS5)
+- **Recent Activity**: Track changes to cards and todos
+- **Auto-Archive**: Cards older than 30 days are automatically archived
+- **Dark Mode**: Toggle between light and dark themes
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+
+- Rust 1.77+
+- pnpm 8+
+
+### Installation
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Install dependencies
+pnpm install
+
+# Set up database (creates SQLite database)
+echo 'DATABASE_URL="file:./dev.db"' > .env
+npx prisma migrate dev --name init
+
+# Run in development mode
+pnpm tauri:dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Production Build
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm tauri:build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project Structure
 
-## Learn More
+```
+tin/
+├── prisma/              # Prisma schema and migrations
+│   ├── schema.prisma
+│   └── fts5_setup.sql   # FTS5 virtual table setup
+├── src/
+│   ├── app/             # Next.js pages
+│   ├── components/      # React components
+│   ├── lib/             # API wrappers and types
+│   └── styles/          # Theme and design tokens
+└── src-tauri/
+    ├── migrations/      # SQLite migrations
+    └── src/             # Rust backend
+        ├── commands.rs  # Tauri commands
+        ├── db.rs        # Database layer
+        ├── models.rs    # DTOs
+        └── archiver.rs  # Background job
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Architecture
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Frontend**: Next.js 16 + React 19 + Tailwind CSS 4 + Motion
+- **Backend**: Tauri 2.9 + Rust + rusqlite
+- **Database**: SQLite with FTS5 for full-text search
+- **State**: Local-first, no external dependencies
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## API
 
-## Deploy on Vercel
+All Tauri commands are typed and accessible via `src/lib/api.ts`:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `listCards()` – Get all non-archived cards
+- `getCard(id)` – Get card with todos
+- `createCard(title, amount)` – Create new card
+- `updateCard(id, title?, amount?)` – Update card
+- `deleteCard(id)` – Delete card
+- `addTodo(cardId, title, amount?, useCurrentTime, scheduledAt?)` – Add todo (atomic deduction)
+- `updateTodo(id, ...)` – Update todo
+- `deleteTodo(id)` – Delete todo
+- `search(query)` – Full-text search (supports `after:` and `before:` date filters)
+- `recentChanges(limit?)` – Get recent activity
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+MIT
