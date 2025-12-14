@@ -2,20 +2,21 @@
 
 import { motion } from "motion/react";
 import type { ChangeLog } from "@/lib/types";
-import { Icon } from "./Icon";
+import { RiAddLine, RiEditLine, RiDeleteBinLine, RiArchiveLine, RiCheckLine } from "@remixicon/react";
+import { colors } from "@/styles/tokens";
 
 interface RecentChangesProps {
     changes: ChangeLog[];
     onCardClick: (cardId: string) => void;
 }
 
-const kindLabels: Record<string, { label: string; icon: "plus" | "edit" | "trash" | "archive" | "check" }> = {
-    created: { label: "Card created", icon: "plus" },
-    updated: { label: "Card updated", icon: "edit" },
-    todo_added: { label: "Todo added", icon: "plus" },
-    todo_updated: { label: "Todo updated", icon: "edit" },
-    todo_deleted: { label: "Todo deleted", icon: "trash" },
-    archived: { label: "Card archived", icon: "archive" },
+const kindConfig: Record<string, { icon: React.ElementType; label: string }> = {
+    created: { icon: RiAddLine, label: "Created" },
+    updated: { icon: RiEditLine, label: "Updated" },
+    todo_added: { icon: RiAddLine, label: "Todo added" },
+    todo_updated: { icon: RiEditLine, label: "Todo updated" },
+    todo_deleted: { icon: RiDeleteBinLine, label: "Removed" },
+    archived: { icon: RiArchiveLine, label: "Archived" },
 };
 
 export function RecentChanges({ changes, onCardClick }: RecentChangesProps) {
@@ -29,46 +30,75 @@ export function RecentChanges({ changes, onCardClick }: RecentChangesProps) {
         const diffMs = now.getTime() - date.getTime();
         const diffMins = Math.floor(diffMs / (1000 * 60));
 
-        if (diffMins < 1) return "Just now";
-        if (diffMins < 60) return `${diffMins}m ago`;
-        if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
-        return date.toLocaleDateString();
+        if (diffMins < 1) return "now";
+        if (diffMins < 60) return `${diffMins}m`;
+        if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h`;
+        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     };
 
     return (
         <section className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-2">
-                <Icon name="clock" size={20} className="text-gray-400" />
-                Recent Activity
+            {/* Section header - notebook style */}
+            <h2
+                className="section-header"
+                style={{ color: colors.text.tertiary }}
+            >
+                Recent Changes
             </h2>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
                 {changes.slice(0, 5).map((change, index) => {
-                    const config = kindLabels[change.kind] || { label: change.kind, icon: "edit" as const };
+                    const config = kindConfig[change.kind] || { icon: RiEditLine, label: change.kind };
+                    const Icon = config.icon;
                     const payload = change.payload as Record<string, unknown>;
 
                     return (
                         <motion.button
                             key={change.id}
-                            initial={{ opacity: 0, x: -10 }}
+                            initial={{ opacity: 0, x: -6 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: index * 0.05 }}
+                            transition={{ delay: index * 0.04, duration: 0.2 }}
                             onClick={() => onCardClick(change.card_id)}
-                            className="w-full flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:border-blue-200 dark:hover:border-blue-800 transition-all text-left"
+                            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors"
+                            style={{
+                                background: 'transparent',
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.surface}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                         >
-                            <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                                <Icon name={config.icon} size={16} className="text-gray-500" />
+                            {/* Icon */}
+                            <div
+                                className="flex-shrink-0 w-6 h-6 rounded flex items-center justify-center"
+                                style={{
+                                    background: colors.bg.surface,
+                                    color: colors.text.tertiary,
+                                }}
+                            >
+                                <Icon size={12} />
                             </div>
 
+                            {/* Content */}
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                <p
+                                    className="text-xs font-medium truncate"
+                                    style={{ color: colors.text.secondary }}
+                                >
                                     {config.label}
-                                    {payload.title ? `: ${String(payload.title)}` : null}
-                                </p>
-                                <p className="text-xs text-gray-500">
-                                    {formatTime(change.created_at)}
+                                    {payload.title ? (
+                                        <span style={{ color: colors.text.tertiary }}>
+                                            {" · "}{String(payload.title)}
+                                        </span>
+                                    ) : null}
                                 </p>
                             </div>
+
+                            {/* Time */}
+                            <span
+                                className="text-xs tabular-nums"
+                                style={{ color: colors.text.tertiary }}
+                            >
+                                {formatTime(change.created_at)}
+                            </span>
                         </motion.button>
                     );
                 })}
