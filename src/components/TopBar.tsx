@@ -10,10 +10,6 @@ import {
     RiMoonLine,
     RiMenuLine,
     RiCloseLine,
-    RiTimeLine,
-    RiBookmarkLine,
-    RiSettings4Line,
-    RiQuestionLine,
     RiComputerLine,
     RiMore2Fill,
     RiCheckboxMultipleLine,
@@ -21,9 +17,11 @@ import {
     RiArchiveLine
 } from "@remixicon/react";
 import { colors } from "@/styles/tokens";
+import { Sidebar, useSwipeToOpenSidebar } from "./Sidebar";
+import { SearchFilters, SearchFilterType } from "./SearchFilters";
 
 interface TopBarProps {
-    onSearch: (query: string) => void;
+    onSearch: (query: string, filter?: SearchFilterType, amountRange?: { min: string; max: string }, date?: string) => void;
     onAddCard: () => void;
     activeTab?: "recent" | "saved";
     onTabChange?: (tab: "recent" | "saved") => void;
@@ -51,10 +49,18 @@ export function TopBar({
     const { theme, setTheme, resolvedTheme } = useTheme();
     const searchInputRef = useRef<HTMLInputElement>(null);
 
+    // Search filter state
+    const [searchFilter, setSearchFilter] = useState<SearchFilterType>("all");
+    const [amountRange, setAmountRange] = useState({ min: "", max: "" });
+    const [dateValue, setDateValue] = useState("");
+
     // Avoid hydration mismatch
     useEffect(() => {
         setMounted(true);
     }, []);
+
+    // Enable swipe-from-left-edge to open sidebar (Android)
+    useSwipeToOpenSidebar(useCallback(() => setShowMenu(true), []));
 
     // Handle ESC key to close search/menu
     useEffect(() => {
@@ -87,24 +93,61 @@ export function TopBar({
         }
     }, [showSearch]);
 
+    // Close search on tap outside (mobile/touch devices only)
+    useEffect(() => {
+        const isTouchDevice = () => {
+            return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        };
+
+        if (!showSearch || !isTouchDevice()) return;
+
+        const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+            const target = e.target as HTMLElement;
+            // Check if click is outside search panel
+            const searchPanel = document.getElementById('search-panel');
+            if (searchPanel && !searchPanel.contains(target)) {
+                setShowSearch(false);
+                setSearchQuery("");
+                onSearch("");
+            }
+        };
+
+        // Use capture phase to catch event before it bubbles
+        document.addEventListener('touchstart', handleClickOutside, true);
+        return () => document.removeEventListener('touchstart', handleClickOutside, true);
+    }, [showSearch, onSearch]);
+
     // Live search as user types
     const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setSearchQuery(value);
-        onSearch(value);
-    }, [onSearch]);
+        onSearch(value, searchFilter, amountRange, dateValue);
+    }, [onSearch, searchFilter, amountRange, dateValue]);
+
+    // Trigger search when filter changes
+    const handleFilterChange = useCallback((filter: SearchFilterType) => {
+        setSearchFilter(filter);
+        onSearch(searchQuery, filter, amountRange, dateValue);
+    }, [onSearch, searchQuery, amountRange, dateValue]);
+
+    const handleAmountRangeChange = useCallback((range: { min: string; max: string }) => {
+        setAmountRange(range);
+        onSearch(searchQuery, searchFilter, range, dateValue);
+    }, [onSearch, searchQuery, searchFilter, dateValue]);
+
+    const handleDateChange = useCallback((date: string) => {
+        setDateValue(date);
+        onSearch(searchQuery, searchFilter, amountRange, date);
+    }, [onSearch, searchQuery, searchFilter, amountRange]);
 
     const handleTabClick = useCallback((tab: "recent" | "saved") => {
         onTabChange?.(tab);
     }, [onTabChange]);
 
     const cycleTheme = useCallback(() => {
-        // Cycle: system -> dark -> light (coming soon message) -> system
+        // Toggle between system and dark (light theme coming later)
         if (theme === "system") {
             setTheme("dark");
-        } else if (theme === "dark") {
-            // Light theme coming soon - show alert and stay on dark
-            alert("Light theme coming soon!");
         } else {
             setTheme("system");
         }
@@ -339,6 +382,7 @@ export function TopBar({
                 <AnimatePresence>
                     {showSearch && (
                         <motion.div
+                            id="search-panel"
                             initial={{ scale: 0.95, opacity: 0, y: -10 }}
                             animate={{ scale: 1, opacity: 1, y: 0 }}
                             exit={{ scale: 0.95, opacity: 0, y: -10 }}
@@ -346,33 +390,48 @@ export function TopBar({
                             style={{ borderTop: `1px solid ${colors.border.subtle}` }}
                         >
                             <div className="max-w-3xl mx-auto px-4 py-2">
-                                <div className="relative">
-                                    <input
-                                        ref={searchInputRef}
-                                        type="text"
-                                        value={searchQuery}
-                                        onChange={handleSearchChange}
-                                        placeholder="Search cards, todos, or dates..."
-                                        className="w-full px-4 py-2 text-sm rounded-lg outline-none"
-                                        style={{
-                                            background: colors.bg.surface,
-                                            border: `1px solid ${colors.border.subtle}`,
-                                            color: colors.text.primary,
-                                        }}
-                                    />
-                                    {searchQuery && (
-                                        <button
-                                            onClick={() => {
-                                                setSearchQuery("");
-                                                onSearch("");
-                                                searchInputRef.current?.focus();
+                                <div className="flex items-start gap-2">
+                                    {/* Search Input */}
+                                    <div className="relative flex-1">
+                                        <input
+                                            ref={searchInputRef}
+                                            type="text"
+                                            value={searchQuery}
+                                            onChange={handleSearchChange}
+                                            placeholder="Search cards, todos, or dates..."
+                                            className="w-full px-4 py-2 text-sm rounded-lg outline-none"
+                                            style={{
+                                                background: colors.bg.surface,
+                                                border: `1px solid ${colors.border.subtle}`,
+                                                color: colors.text.primary,
                                             }}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2"
-                                            style={{ color: colors.text.tertiary }}
-                                        >
-                                            <RiCloseLine size={14} />
-                                        </button>
-                                    )}
+                                        />
+                                        {searchQuery && (
+                                            <button
+                                                onClick={() => {
+                                                    setSearchQuery("");
+                                                    setSearchFilter("all");
+                                                    setAmountRange({ min: "", max: "" });
+                                                    setDateValue("");
+                                                    onSearch("");
+                                                    searchInputRef.current?.focus();
+                                                }}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2"
+                                                style={{ color: colors.text.tertiary }}
+                                            >
+                                                <RiCloseLine size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {/* Filter Dropdown */}
+                                    <SearchFilters
+                                        activeFilter={searchFilter}
+                                        onFilterChange={handleFilterChange}
+                                        amountRange={amountRange}
+                                        onAmountRangeChange={handleAmountRangeChange}
+                                        dateValue={dateValue}
+                                        onDateChange={handleDateChange}
+                                    />
                                 </div>
                                 <p
                                     className="text-xs mt-1.5 px-1 hidden sm:block"
@@ -386,131 +445,13 @@ export function TopBar({
                 </AnimatePresence>
             </motion.header>
 
-            {/* Side Menu Overlay */}
-            <AnimatePresence>
-                {showMenu && (
-                    <>
-                        {/* Backdrop */}
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.15 }}
-                            className="fixed inset-0 z-50"
-                            style={{ background: "rgba(0,0,0,0.5)" }}
-                            onClick={() => setShowMenu(false)}
-                        />
-
-                        {/* Side Panel */}
-                        <motion.aside
-                            initial={{ x: -280 }}
-                            animate={{ x: 0 }}
-                            exit={{ x: -280 }}
-                            transition={{ duration: 0.2, ease: "easeOut" }}
-                            className="fixed left-0 top-0 bottom-0 w-64 z-50 flex flex-col"
-                            style={{ background: colors.bg.raised }}
-                        >
-                            {/* Header */}
-                            <div
-                                className="flex items-center justify-between px-4 py-4"
-                                style={{
-                                    borderBottom: `1px solid ${colors.border.subtle}`,
-                                    paddingTop: "max(1rem, env(safe-area-inset-top))", // Respect notch/status bar
-                                }}
-                            >
-                                <span className="text-lg font-semibold" style={{ color: colors.text.primary }}>
-                                    Tin
-                                </span>
-                                <button
-                                    onClick={() => setShowMenu(false)}
-                                    className="p-1 rounded-md"
-                                    style={{ color: colors.text.tertiary }}
-                                >
-                                    <RiCloseLine size={18} />
-                                </button>
-                            </div>
-
-                            {/* Navigation */}
-                            <nav className="flex-1 py-2">
-                                {[
-                                    { icon: RiTimeLine, label: "Recent", active: activeTab === "recent" },
-                                    { icon: RiBookmarkLine, label: "Saved", active: activeTab === "saved" },
-                                ].map((item) => (
-                                    <button
-                                        key={item.label}
-                                        onClick={() => {
-                                            handleTabClick(item.label.toLowerCase() as "recent" | "saved");
-                                            setShowMenu(false);
-                                        }}
-                                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150"
-                                        style={{
-                                            color: item.active ? colors.text.primary : colors.text.secondary,
-                                            background: item.active ? colors.bg.surface : "transparent",
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            if (!item.active) e.currentTarget.style.background = colors.bg.surface;
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            if (!item.active) e.currentTarget.style.background = "transparent";
-                                        }}
-                                    >
-                                        <item.icon size={16} />
-                                        {item.label}
-                                    </button>
-                                ))}
-
-                                <div
-                                    className="my-2 mx-4"
-                                    style={{ height: 1, background: colors.border.subtle }}
-                                />
-
-                                {[
-                                    { icon: RiSettings4Line, label: "Settings" },
-                                    { icon: RiQuestionLine, label: "Help / About" },
-                                ].map((item) => (
-                                    <button
-                                        key={item.label}
-                                        className="flex items-center gap-3 w-full px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150"
-                                        style={{ color: colors.text.secondary }}
-                                        onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.surface}
-                                        onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                                    >
-                                        <item.icon size={16} />
-                                        {item.label}
-                                    </button>
-                                ))}
-
-                                {/* Theme Toggle (Mobile) */}
-                                <button
-                                    onClick={cycleTheme}
-                                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150"
-                                    style={{ color: colors.text.secondary }}
-                                    onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.surface}
-                                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
-                                >
-                                    <span className="w-4 h-4 flex items-center justify-center">
-                                        {getThemeIcon()}
-                                    </span>
-                                    Theme: <span className="capitalize">{theme}</span>
-                                </button>
-                            </nav>
-
-                            {/* Footer */}
-                            <div
-                                className="px-4 py-3 text-xs"
-                                style={{
-                                    color: colors.text.tertiary,
-                                    borderTop: `1px solid ${colors.border.subtle}`,
-                                    paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))", // Respect home indicator
-                                }}
-                            >
-                                v0.1.0
-                            </div>
-                        </motion.aside>
-                    </>
-                )
-                }
-            </AnimatePresence >
+            {/* Sidebar Component */}
+            <Sidebar
+                isOpen={showMenu}
+                onClose={() => setShowMenu(false)}
+                activeTab={activeTab}
+                onTabChange={handleTabClick}
+            />
         </>
     );
 }

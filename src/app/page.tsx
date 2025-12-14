@@ -10,6 +10,7 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import type { Card, CardWithTodos, ChangeLog } from "@/lib/types";
 import * as api from "@/lib/api";
 import { colors } from "@/styles/tokens";
+import type { SearchFilterType } from "@/components/SearchFilters";
 
 type TabType = "recent" | "saved";
 type SelectionAction = "delete" | "move" | null;
@@ -30,6 +31,11 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>("recent");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Search filter state
+  const [searchFilter, setSearchFilter] = useState<SearchFilterType>("all");
+  const [amountRange, setAmountRange] = useState({ min: "", max: "" });
+  const [dateFilter, setDateFilter] = useState("");
 
   // Selection mode state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -100,19 +106,73 @@ export default function Home() {
     }
   }, [activeTab, loadArchivedCards]);
 
-  // Filter cards based on search query and active tab
-  const baseCards = activeTab === "saved" ? archivedCards : cards;
-  const filteredCards = searchQuery
-    ? baseCards.filter((card) =>
-      card.title?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    : baseCards;
+  // Android back button navigation - use browser history to navigate back through app
+  useEffect(() => {
+    const handlePopState = () => {
+      // If viewing a card, go back to dashboard
+      if (selectedCard) {
+        setSelectedCard(null);
+        localStorage.removeItem("activeCardId");
+        loadData();
+        // Push another state so back button works again
+        window.history.pushState({ screen: "dashboard" }, "");
+      }
+      // If on dashboard, allow default (app close on Android)
+    };
 
-  // displayedCards is just filteredCards now since baseCards handles the tab logic
+    // Push initial state when component mounts
+    window.history.pushState({ screen: "dashboard" }, "");
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [selectedCard, loadData]);
+
+  // Filter cards based on search query, filter type, and active tab
+  const baseCards = activeTab === "saved" ? archivedCards : cards;
+  const filteredCards = baseCards.filter((card) => {
+    // Text search
+    if (searchQuery) {
+      const matchesTitle = card.title?.toLowerCase().includes(searchQuery.toLowerCase());
+      // For cards filter, only check title
+      if (searchFilter === "cards" && !matchesTitle) return false;
+      // For todos filter, skip cards-only matching (would need to load todos)
+      if (searchFilter === "todos") return true; // API handles this
+      // For all/date/amount, include title match
+      if (searchFilter === "all" && !matchesTitle) return false;
+    }
+
+    // Date filter
+    if (searchFilter === "date" && dateFilter) {
+      const cardDate = new Date(card.created_at).toISOString().split('T')[0];
+      if (cardDate !== dateFilter) return false;
+    }
+
+    // Amount filter
+    if (searchFilter === "amount") {
+      const amount = parseFloat(card.amount);
+      const min = amountRange.min ? parseFloat(amountRange.min) : -Infinity;
+      const max = amountRange.max ? parseFloat(amountRange.max) : Infinity;
+      if (amount < min || amount > max) return false;
+    }
+
+    return true;
+  });
+
+  // displayedCards is filtered cards
   const displayedCards = filteredCards;
 
-  const handleSearch = useCallback((query: string) => {
+  const handleSearch = useCallback((
+    query: string,
+    filter?: SearchFilterType,
+    range?: { min: string; max: string },
+    date?: string
+  ) => {
     setSearchQuery(query);
+    if (filter !== undefined) setSearchFilter(filter);
+    if (range !== undefined) setAmountRange(range);
+    if (date !== undefined) setDateFilter(date);
   }, []);
 
   const handleTabChange = useCallback((tab: TabType) => {
@@ -131,6 +191,8 @@ export default function Home() {
       const fullCard = await api.getCard(newCard.id);
       setSelectedCard(fullCard);
       localStorage.setItem("activeCardId", newCard.id);
+      // Push history state for Android back button navigation
+      window.history.pushState({ screen: "cardView", cardId: newCard.id }, "");
     } catch (error) {
       console.error("Failed to create card:", error);
     }
@@ -141,6 +203,8 @@ export default function Home() {
       const fullCard = await api.getCard(cardId);
       setSelectedCard(fullCard);
       localStorage.setItem("activeCardId", cardId);
+      // Push history state for Android back button navigation
+      window.history.pushState({ screen: "cardView", cardId }, "");
     } catch (error) {
       console.error("Failed to load card:", error);
     }
