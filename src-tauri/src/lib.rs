@@ -20,6 +20,7 @@ pub fn run() {
 
             tauri::async_runtime::spawn(archiver::start_archiver());
 
+            // Debug-only: Enable logging plugin
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -27,6 +28,15 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Debug-only: Open devtools on main window
+            #[cfg(debug_assertions)]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
