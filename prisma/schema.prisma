@@ -1,0 +1,51 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "sqlite"
+}
+
+model Card {
+    id         String      @id @default(cuid())
+    title      String?
+    amount     Float       @default(0)
+    createdAt  DateTime    @default(now())
+    updatedAt  DateTime    @updatedAt
+    archivedAt DateTime?
+    archived   Boolean     @default(false)
+    todos      Todo[]
+    changes    ChangeLog[]
+
+    @@index([createdAt])
+    @@index([archived])
+}
+
+model Todo {
+    id          String    @id @default(cuid())
+    cardId      String
+    card        Card      @relation(fields: [cardId], references: [id], onDelete: Cascade)
+    title       String
+    amount      Float?
+    done        Boolean   @default(false)
+    createdAt   DateTime  @default(now())
+    scheduledAt DateTime?
+    orderIndex  Int       @default(0)
+    updatedAt   DateTime  @updatedAt
+
+    @@index([cardId])
+    @@index([title])
+    @@index([createdAt])
+}
+
+model ChangeLog {
+    id        String   @id @default(cuid())
+    cardId    String
+    card      Card     @relation(fields: [cardId], references: [id], onDelete: Cascade)
+    kind      String
+    payload   String   @default("{}")
+    createdAt DateTime @default(now())
+
+    @@index([cardId])
+    @@index([createdAt])
+}
