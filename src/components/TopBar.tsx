@@ -59,6 +59,7 @@ export function TopBar({
     // Handle ESC key to close search/menu
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            // Close on ESC
             if (e.key === "Escape") {
                 if (showSearch) {
                     setShowSearch(false);
@@ -68,6 +69,11 @@ export function TopBar({
                 if (showMenu) {
                     setShowMenu(false);
                 }
+            }
+            // Toggle search on Ctrl+K / Cmd+K
+            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+                e.preventDefault();
+                setShowSearch(prev => !prev);
             }
         };
         document.addEventListener("keydown", handleKeyDown);
@@ -122,6 +128,7 @@ export function TopBar({
                 style={{
                     background: colors.bg.base,
                     borderBottom: `1px solid ${colors.border.subtle}`,
+                    paddingTop: "env(safe-area-inset-top, 0px)", // Respect status bar
                 }}
                 className="sticky top-0 z-50"
             >
@@ -222,7 +229,7 @@ export function TopBar({
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
                                 onClick={cycleTheme}
-                                className="p-2 rounded-md cursor-pointer transition-colors duration-150"
+                                className="hidden sm:block p-2 rounded-md cursor-pointer transition-colors duration-150"
                                 style={{ color: colors.text.tertiary }}
                                 onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.hover}
                                 onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
@@ -313,7 +320,7 @@ export function TopBar({
                                 whileHover={{ y: -1 }}
                                 whileTap={{ scale: 0.98 }}
                                 onClick={onAddCard}
-                                className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium ml-1 cursor-pointer transition-all duration-150"
+                                className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 rounded-md text-xs font-medium ml-1 cursor-pointer transition-all duration-150"
                                 style={{
                                     background: colors.accent.muted,
                                     color: colors.accent.primary,
@@ -321,8 +328,8 @@ export function TopBar({
                                 onMouseEnter={(e) => e.currentTarget.style.background = colors.accent.primary + "30"}
                                 onMouseLeave={(e) => e.currentTarget.style.background = colors.accent.muted}
                             >
-                                <RiAddLine size={14} />
-                                New
+                                <RiAddLine size={16} />
+                                <span className="hidden sm:inline">New</span>
                             </motion.button>
                         </div>
                     </div>
@@ -332,26 +339,21 @@ export function TopBar({
                 <AnimatePresence>
                     {showSearch && (
                         <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.15, ease: "easeOut" }}
+                            initial={{ scale: 0.95, opacity: 0, y: -10 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.95, opacity: 0, y: -10 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
                             style={{ borderTop: `1px solid ${colors.border.subtle}` }}
                         >
                             <div className="max-w-3xl mx-auto px-4 py-2">
                                 <div className="relative">
-                                    <RiSearchLine
-                                        size={14}
-                                        className="absolute left-3 top-1/2 -translate-y-1/2"
-                                        style={{ color: colors.text.tertiary }}
-                                    />
                                     <input
                                         ref={searchInputRef}
                                         type="text"
                                         value={searchQuery}
                                         onChange={handleSearchChange}
                                         placeholder="Search cards, todos, or dates..."
-                                        className="w-full pl-9 pr-8 py-2 text-sm rounded-lg outline-none"
+                                        className="w-full px-4 py-2 text-sm rounded-lg outline-none"
                                         style={{
                                             background: colors.bg.surface,
                                             border: `1px solid ${colors.border.subtle}`,
@@ -373,7 +375,7 @@ export function TopBar({
                                     )}
                                 </div>
                                 <p
-                                    className="text-xs mt-1.5 px-1"
+                                    className="text-xs mt-1.5 px-1 hidden sm:block"
                                     style={{ color: colors.text.tertiary }}
                                 >
                                     Press <kbd className="px-1 py-0.5 rounded text-xs" style={{ background: colors.bg.hover }}>ESC</kbd> to close
@@ -411,7 +413,10 @@ export function TopBar({
                             {/* Header */}
                             <div
                                 className="flex items-center justify-between px-4 py-4"
-                                style={{ borderBottom: `1px solid ${colors.border.subtle}` }}
+                                style={{
+                                    borderBottom: `1px solid ${colors.border.subtle}`,
+                                    paddingTop: "max(1rem, env(safe-area-inset-top))", // Respect notch/status bar
+                                }}
                             >
                                 <span className="text-lg font-semibold" style={{ color: colors.text.primary }}>
                                     Tin
@@ -474,6 +479,20 @@ export function TopBar({
                                         {item.label}
                                     </button>
                                 ))}
+
+                                {/* Theme Toggle (Mobile) */}
+                                <button
+                                    onClick={cycleTheme}
+                                    className="flex items-center gap-3 w-full px-4 py-2.5 text-sm cursor-pointer transition-colors duration-150"
+                                    style={{ color: colors.text.secondary }}
+                                    onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.surface}
+                                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
+                                >
+                                    <span className="w-4 h-4 flex items-center justify-center">
+                                        {getThemeIcon()}
+                                    </span>
+                                    Theme: <span className="capitalize">{theme}</span>
+                                </button>
                             </nav>
 
                             {/* Footer */}
@@ -482,14 +501,16 @@ export function TopBar({
                                 style={{
                                     color: colors.text.tertiary,
                                     borderTop: `1px solid ${colors.border.subtle}`,
+                                    paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))", // Respect home indicator
                                 }}
                             >
                                 v0.1.0
                             </div>
                         </motion.aside>
                     </>
-                )}
-            </AnimatePresence>
+                )
+                }
+            </AnimatePresence >
         </>
     );
 }
