@@ -4,9 +4,10 @@ import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { CardWithTodos, Todo } from "@/lib/types";
 import { TodoItem } from "./TodoItem";
-import { Icon } from "./Icon";
+import { RiArrowLeftLine, RiAddLine } from "@remixicon/react";
 import Decimal from "decimal.js";
 import * as api from "@/lib/api";
+import { colors } from "@/styles/tokens";
 
 function safeDecimal(value: string | null | undefined): Decimal {
     try {
@@ -14,6 +15,19 @@ function safeDecimal(value: string | null | undefined): Decimal {
     } catch {
         return new Decimal(0);
     }
+}
+
+// Format amount to 2 decimal places
+function formatAmount(value: string): string {
+    const num = parseFloat(value);
+    if (isNaN(num)) return "0.00";
+    return num.toFixed(2);
+}
+
+// Validate numeric input (allow digits, decimal point, minus sign)
+function isValidAmountInput(value: string): boolean {
+    if (value === "" || value === "-") return true;
+    return /^-?\d*\.?\d*$/.test(value);
 }
 
 interface CardViewProps {
@@ -24,7 +38,7 @@ interface CardViewProps {
 
 export function CardView({ card, onBack, onUpdate }: CardViewProps) {
     const [title, setTitle] = useState(card.title || "");
-    const [amount, setAmount] = useState(card.amount);
+    const [amount, setAmount] = useState(formatAmount(card.amount));
     const [todos, setTodos] = useState<Todo[]>(card.todos);
     const [showAddForm, setShowAddForm] = useState(false);
     const [newTodoTitle, setNewTodoTitle] = useState("");
@@ -32,17 +46,18 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
     const [useCurrentTime, setUseCurrentTime] = useState(true);
     const [scheduledAt, setScheduledAt] = useState("");
     const [isLoading, setIsLoading] = useState(false);
-    const [editingTodoId, setEditingTodoId] = useState<string | null>(null);
 
     useEffect(() => {
         setTitle(card.title || "");
-        setAmount(card.amount);
+        setAmount(formatAmount(card.amount));
         setTodos(card.todos);
     }, [card]);
 
     const totalDeducted = todos.reduce((sum, todo) => {
         return sum.plus(safeDecimal(todo.amount));
     }, new Decimal(0));
+
+    const remaining = safeDecimal(amount).minus(totalDeducted);
 
     const handleTitleBlur = useCallback(async () => {
         if (title !== card.title) {
@@ -51,9 +66,19 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
         }
     }, [card.id, card.title, title, onUpdate]);
 
+    const handleAmountChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        if (isValidAmountInput(value)) {
+            setAmount(value);
+        }
+    }, []);
+
     const handleAmountBlur = useCallback(async () => {
-        if (amount !== card.amount) {
-            await api.updateCard(card.id, undefined, amount);
+        const formatted = formatAmount(amount);
+        setAmount(formatted);
+
+        if (formatted !== formatAmount(card.amount)) {
+            await api.updateCard(card.id, undefined, formatted);
             onUpdate();
         }
     }, [card.id, card.amount, amount, onUpdate]);
@@ -72,7 +97,7 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
             );
 
             setTodos((prev) => [...prev, result.todo]);
-            setAmount(result.updated_card.amount);
+            setAmount(formatAmount(result.updated_card.amount));
             setNewTodoTitle("");
             setNewTodoAmount("");
             setScheduledAt("");
@@ -97,22 +122,53 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
         onUpdate();
     }, [onUpdate]);
 
+    const handleEditTodo = useCallback(async (todoId: string, newTitle: string, newAmount?: string) => {
+        await api.updateTodo(todoId, newTitle, newAmount);
+        setTodos((prev) =>
+            prev.map((t) =>
+                t.id === todoId
+                    ? { ...t, title: newTitle, amount: newAmount || t.amount }
+                    : t
+            )
+        );
+        onUpdate();
+    }, [onUpdate]);
+
+    const handleNewTodoAmountChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        if (isValidAmountInput(value)) {
+            setNewTodoAmount(value);
+        }
+    }, []);
+
     return (
         <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="min-h-screen bg-gray-50 dark:bg-gray-900"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="min-h-screen"
+            style={{ background: colors.bg.base }}
         >
-            <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 dark:bg-gray-900/80 border-b border-gray-200 dark:border-gray-800">
-                <div className="max-w-3xl mx-auto px-4 py-4 flex items-center gap-4">
+            {/* Header */}
+            <header
+                className="sticky top-0 z-50"
+                style={{
+                    background: colors.bg.base,
+                    borderBottom: `1px solid ${colors.border.subtle}`,
+                }}
+            >
+                <div className="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
                     <motion.button
-                        whileHover={{ scale: 1.05 }}
+                        whileHover={{ x: -2 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={onBack}
-                        className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        className="p-1.5 rounded-md cursor-pointer"
+                        style={{ color: colors.text.tertiary }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.hover}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                     >
-                        ←
+                        <RiArrowLeftLine size={18} />
                     </motion.button>
                     <input
                         type="text"
@@ -120,38 +176,67 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                         onChange={(e) => setTitle(e.target.value)}
                         onBlur={handleTitleBlur}
                         placeholder="Card title..."
-                        className="flex-1 text-xl font-semibold bg-transparent border-none outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400"
+                        className="flex-1 text-base font-medium bg-transparent border-none outline-none"
+                        style={{
+                            color: colors.text.primary,
+                        }}
                     />
                 </div>
             </header>
 
-            <main className="max-w-3xl mx-auto px-4 py-6">
+            <main className="max-w-2xl mx-auto px-4 py-5">
+                {/* Main Balance Section - Consistent with dashboard */}
                 <motion.section
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl p-6 mb-6 shadow-xl shadow-blue-500/20"
+                    transition={{ delay: 0.05 }}
+                    className="rounded-xl p-5 mb-5"
+                    style={{
+                        background: colors.bg.raised,
+                        border: `1px solid ${colors.border.subtle}`,
+                    }}
                 >
-                    <label className="text-sm font-medium text-white/80 block mb-2">
+                    <label
+                        className="text-xs font-medium block mb-2"
+                        style={{ color: colors.text.tertiary }}
+                    >
                         Main Balance
                     </label>
-                    <div className="flex items-center gap-2">
-                        <span className="text-2xl text-white/80">$</span>
+                    <div className="flex items-baseline gap-1.5">
+                        <span
+                            className="text-xl"
+                            style={{ color: colors.text.tertiary }}
+                        >
+                            $
+                        </span>
                         <input
                             type="text"
+                            inputMode="decimal"
                             value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
+                            onChange={handleAmountChange}
                             onBlur={handleAmountBlur}
-                            className="text-4xl font-bold bg-transparent border-none outline-none text-white w-full"
+                            placeholder="0.00"
+                            className="text-3xl font-semibold bg-transparent border-none outline-none w-full tabular-nums"
+                            style={{
+                                color: colors.text.primary,
+                            }}
                         />
                     </div>
                 </motion.section>
 
-                <section className="mb-6">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                {/* Items Section */}
+                <section className="mb-5">
+                    <div className="flex items-center justify-between mb-3">
+                        <h2
+                            className="text-sm font-medium"
+                            style={{ color: colors.text.primary }}
+                        >
                             Items
                         </h2>
-                        <span className="text-sm text-gray-500">
+                        <span
+                            className="text-xs"
+                            style={{ color: colors.text.tertiary }}
+                        >
                             {todos.length} item{todos.length !== 1 ? "s" : ""}
                         </span>
                     </div>
@@ -163,7 +248,7 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                                     key={todo.id}
                                     todo={todo}
                                     onToggle={handleToggleTodo}
-                                    onEdit={(id) => setEditingTodoId(id)}
+                                    onEdit={handleEditTodo}
                                     onDelete={handleDeleteTodo}
                                 />
                             ))}
@@ -176,37 +261,62 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: "auto" }}
                                 exit={{ opacity: 0, height: 0 }}
-                                className="mt-4 bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700"
+                                transition={{ duration: 0.15 }}
+                                className="mt-3 rounded-xl p-4"
+                                style={{
+                                    background: colors.bg.raised,
+                                    border: `1px solid ${colors.border.subtle}`,
+                                }}
                             >
                                 <input
                                     type="text"
                                     value={newTodoTitle}
                                     onChange={(e) => setNewTodoTitle(e.target.value)}
                                     placeholder="What needs to be done?"
-                                    className="w-full p-3 rounded-lg bg-gray-100 dark:bg-gray-700 border-none outline-none text-gray-900 dark:text-gray-100 placeholder-gray-500 mb-3"
+                                    className="w-full p-2.5 rounded-lg text-sm outline-none mb-3"
+                                    style={{
+                                        background: colors.bg.surface,
+                                        border: `1px solid ${colors.border.subtle}`,
+                                        color: colors.text.primary,
+                                    }}
                                     autoFocus
                                 />
 
                                 <div className="grid grid-cols-2 gap-3 mb-3">
                                     <div>
-                                        <label className="text-xs font-medium text-gray-500 block mb-1">
+                                        <label
+                                            className="text-xs block mb-1"
+                                            style={{ color: colors.text.tertiary }}
+                                        >
                                             Amount (optional)
                                         </label>
                                         <input
                                             type="text"
+                                            inputMode="decimal"
                                             value={newTodoAmount}
-                                            onChange={(e) => setNewTodoAmount(e.target.value)}
+                                            onChange={handleNewTodoAmountChange}
                                             placeholder="0.00"
-                                            className="w-full p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none outline-none text-gray-900 dark:text-gray-100 text-sm"
+                                            className="w-full p-2 rounded-lg text-sm outline-none"
+                                            style={{
+                                                background: colors.bg.surface,
+                                                border: `1px solid ${colors.border.subtle}`,
+                                                color: colors.text.primary,
+                                            }}
                                         />
                                     </div>
 
                                     <div>
-                                        <label className="text-xs font-medium text-gray-500 block mb-1">
+                                        <label
+                                            className="text-xs block mb-1"
+                                            style={{ color: colors.text.tertiary }}
+                                        >
                                             Date/Time
                                         </label>
                                         <div className="flex items-center gap-2">
-                                            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+                                            <label
+                                                className="flex items-center gap-1.5 text-xs cursor-pointer"
+                                                style={{ color: colors.text.secondary }}
+                                            >
                                                 <input
                                                     type="checkbox"
                                                     checked={useCurrentTime}
@@ -220,7 +330,12 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                                                     type="datetime-local"
                                                     value={scheduledAt}
                                                     onChange={(e) => setScheduledAt(e.target.value)}
-                                                    className="flex-1 p-2 rounded-lg bg-gray-100 dark:bg-gray-700 border-none outline-none text-gray-900 dark:text-gray-100 text-sm"
+                                                    className="flex-1 p-1.5 rounded-lg text-xs outline-none"
+                                                    style={{
+                                                        background: colors.bg.surface,
+                                                        border: `1px solid ${colors.border.subtle}`,
+                                                        color: colors.text.primary,
+                                                    }}
                                                 />
                                             )}
                                         </div>
@@ -229,17 +344,24 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
 
                                 <div className="flex justify-end gap-2">
                                     <motion.button
-                                        whileTap={{ scale: 0.95 }}
+                                        whileTap={{ scale: 0.97 }}
                                         onClick={() => setShowAddForm(false)}
-                                        className="px-4 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                                        className="px-3 py-1.5 rounded-lg text-xs cursor-pointer transition-colors"
+                                        style={{ color: colors.text.secondary }}
+                                        onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.hover}
+                                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                                     >
                                         Cancel
                                     </motion.button>
                                     <motion.button
-                                        whileTap={{ scale: 0.95 }}
+                                        whileTap={{ scale: 0.97 }}
                                         onClick={handleAddTodo}
                                         disabled={isLoading || !newTodoTitle.trim()}
-                                        className="px-4 py-2 rounded-lg bg-blue-500 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                        style={{
+                                            background: colors.accent.primary,
+                                            color: "#fff",
+                                        }}
                                     >
                                         {isLoading ? "Adding..." : "Add Item"}
                                     </motion.button>
@@ -249,39 +371,73 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                             <motion.button
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
+                                whileHover={{ y: -1 }}
+                                whileTap={{ scale: 0.99 }}
                                 onClick={() => setShowAddForm(true)}
-                                className="w-full mt-4 p-4 rounded-xl border-2 border-dashed border-gray-200 dark:border-gray-700 text-gray-500 hover:border-blue-300 hover:text-blue-500 transition-all flex items-center justify-center gap-2"
+                                className="w-full mt-3 py-3 rounded-xl text-sm cursor-pointer flex items-center justify-center gap-2 transition-colors"
+                                style={{
+                                    border: `1px dashed ${colors.border.default}`,
+                                    color: colors.text.tertiary,
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.borderColor = colors.accent.primary;
+                                    e.currentTarget.style.color = colors.accent.primary;
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.borderColor = colors.border.default;
+                                    e.currentTarget.style.color = colors.text.tertiary;
+                                }}
                             >
-                                <Icon name="plus" size={20} />
+                                <RiAddLine size={16} />
                                 Add item
                             </motion.button>
                         )}
                     </AnimatePresence>
+
+                    {/* Tip */}
+                    <p
+                        className="text-xs mt-3 text-center"
+                        style={{ color: colors.text.tertiary }}
+                    >
+                        💡 Right-click on an item to edit or delete
+                    </p>
                 </section>
 
+                {/* Summary Section */}
                 <motion.section
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700"
+                    transition={{ delay: 0.1 }}
+                    className="rounded-xl p-4"
+                    style={{
+                        background: colors.bg.raised,
+                        border: `1px solid ${colors.border.subtle}`,
+                    }}
                 >
-                    <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500">Total Deducted</span>
-                        <span className="font-semibold text-gray-900 dark:text-gray-100">
+                    <div className="flex items-center justify-between text-sm mb-3">
+                        <span style={{ color: colors.text.tertiary }}>Total Deducted</span>
+                        <span
+                            className="font-medium tabular-nums"
+                            style={{ color: colors.text.primary }}
+                        >
                             ${totalDeducted.toFixed(2)}
                         </span>
                     </div>
-                    <div className="h-px bg-gray-200 dark:bg-gray-700 my-3" />
+                    <div
+                        className="my-3"
+                        style={{ height: 1, background: colors.border.subtle }}
+                    />
                     <div className="flex items-center justify-between">
-                        <span className="text-gray-500">Remaining</span>
+                        <span style={{ color: colors.text.tertiary }}>Remaining</span>
                         <span
-                            className={`text-xl font-bold ${safeDecimal(amount).isNegative()
-                                ? "text-red-500"
-                                : "text-green-500"
-                                }`}
+                            className="text-lg font-semibold tabular-nums"
+                            style={{
+                                color: remaining.isNegative()
+                                    ? colors.status.negative
+                                    : colors.status.positive,
+                            }}
                         >
-                            ${safeDecimal(amount).toFixed(2)}
+                            ${remaining.toFixed(2)}
                         </span>
                     </div>
                 </motion.section>
