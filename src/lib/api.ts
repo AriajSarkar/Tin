@@ -34,6 +34,10 @@ export async function listCards(): Promise<Card[]> {
     return safeInvoke("list_cards", {}, z.array(CardSchema));
 }
 
+export async function listArchivedCards(): Promise<Card[]> {
+    return safeInvoke("list_archived_cards", {}, z.array(CardSchema));
+}
+
 export async function getCard(cardId: string): Promise<CardWithTodos> {
     return safeInvoke("get_card", { cardId }, CardWithTodosSchema);
 }
@@ -96,6 +100,14 @@ export async function search(query: string): Promise<SearchResult[]> {
 
 export async function recentChanges(limit?: number): Promise<ChangeLog[]> {
     return safeInvoke("recent_changes", { limit }, z.array(ChangeLogSchema));
+}
+
+export async function archiveCard(cardId: string): Promise<Card> {
+    return safeInvoke("archive_card", { cardId }, CardSchema);
+}
+
+export async function unarchiveCard(cardId: string): Promise<Card> {
+    return safeInvoke("unarchive_card", { cardId }, CardSchema);
 }
 
 export async function archiveOldCards(): Promise<ArchiveResult> {

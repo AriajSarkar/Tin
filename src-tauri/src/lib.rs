@@ -31,6 +31,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             list_cards,
+            list_archived_cards,
             get_card,
             create_card,
             update_card,
@@ -40,6 +41,8 @@ pub fn run() {
             delete_todo,
             search,
             recent_changes,
+            archive_card,
+            unarchive_card,
             archive_old_cards,
         ])
         .run(tauri::generate_context!())

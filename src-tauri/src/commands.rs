@@ -39,6 +39,32 @@ pub fn list_cards() -> Result<Vec<CardDto>, AppError> {
 }
 
 #[tauri::command]
+pub fn list_archived_cards() -> Result<Vec<CardDto>, AppError> {
+    with_db(|conn| {
+        let mut stmt = conn.prepare(
+            "SELECT id, title, amount, archived, createdAt, updatedAt, archivedAt 
+             FROM Card WHERE archived = 1 ORDER BY archivedAt DESC",
+        )?;
+
+        let cards = stmt
+            .query_map([], |row| {
+                Ok(CardDto {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    amount: format!("{:.6}", row.get::<_, f64>(2)?),
+                    archived: row.get::<_, i32>(3)? != 0,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                    archived_at: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(cards)
+    })
+}
+
+#[tauri::command]
 pub fn get_card(card_id: String) -> Result<CardWithTodosDto, AppError> {
     with_db(|conn| {
         let card = conn
@@ -493,6 +519,116 @@ pub fn recent_changes(limit: Option<i32>) -> Result<Vec<ChangeLogDto>, AppError>
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(changes)
+    })
+}
+
+#[tauri::command]
+pub fn archive_card(card_id: String) -> Result<CardDto, AppError> {
+    let now = now_iso();
+
+    with_db_mut(|conn| {
+        let tx = conn.transaction()?;
+
+        // Check card exists
+        tx.query_row(
+            "SELECT id FROM Card WHERE id = ?1",
+            params![card_id],
+            |_| Ok(()),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::CardNotFound(card_id.clone()),
+            _ => AppError::Database(e),
+        })?;
+
+        // Archive the card
+        tx.execute(
+            "UPDATE Card SET archived = 1, archivedAt = ?1, updatedAt = ?2 WHERE id = ?3",
+            params![now, now, card_id],
+        )?;
+
+        // Log the change
+        let changelog_id = generate_id();
+        let payload = serde_json::json!({ "reason": "user_archive" });
+        tx.execute(
+            "INSERT INTO ChangeLog (id, cardId, kind, payload, createdAt) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![changelog_id, card_id, "archived", payload.to_string(), now],
+        )?;
+
+        tx.commit()?;
+
+        // Return the updated card
+        let card = conn.query_row(
+            "SELECT id, title, amount, archived, createdAt, updatedAt, archivedAt FROM Card WHERE id = ?1",
+            params![card_id],
+            |row| {
+                Ok(CardDto {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    amount: format!("{:.6}", row.get::<_, f64>(2)?),
+                    archived: row.get::<_, i32>(3)? != 0,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                    archived_at: row.get(6)?,
+                })
+            },
+        )?;
+
+        Ok(card)
+    })
+}
+
+#[tauri::command]
+pub fn unarchive_card(card_id: String) -> Result<CardDto, AppError> {
+    let now = now_iso();
+
+    with_db_mut(|conn| {
+        let tx = conn.transaction()?;
+
+        // Check card exists
+        tx.query_row(
+            "SELECT id FROM Card WHERE id = ?1",
+            params![card_id],
+            |_| Ok(()),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::CardNotFound(card_id.clone()),
+            _ => AppError::Database(e),
+        })?;
+
+        // Unarchive the card
+        tx.execute(
+            "UPDATE Card SET archived = 0, archivedAt = NULL, updatedAt = ?1 WHERE id = ?2",
+            params![now, card_id],
+        )?;
+
+        // Log the change
+        let changelog_id = generate_id();
+        let payload = serde_json::json!({ "reason": "user_unarchive" });
+        tx.execute(
+            "INSERT INTO ChangeLog (id, cardId, kind, payload, createdAt) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![changelog_id, card_id, "unarchived", payload.to_string(), now],
+        )?;
+
+        tx.commit()?;
+
+        // Return the updated card
+        let card = conn.query_row(
+            "SELECT id, title, amount, archived, createdAt, updatedAt, archivedAt FROM Card WHERE id = ?1",
+            params![card_id],
+            |row| {
+                Ok(CardDto {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    amount: format!("{:.6}", row.get::<_, f64>(2)?),
+                    archived: row.get::<_, i32>(3)? != 0,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                    archived_at: row.get(6)?,
+                })
+            },
+        )?;
+
+        Ok(card)
     })
 }
 
