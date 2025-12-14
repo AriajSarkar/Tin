@@ -10,7 +10,7 @@ import { colors } from "@/styles/tokens";
 interface TodoItemProps {
     todo: Todo;
     onToggle: (todoId: string, done: boolean) => void;
-    onEdit: (todoId: string, newTitle: string, newAmount?: string) => void;
+    onEdit: (todoId: string, newTitle: string, newAmount?: string, newScheduledAt?: string) => void;
     onDelete: (todoId: string) => void;
 }
 
@@ -23,6 +23,9 @@ export function TodoItem({ todo, onToggle, onEdit, onDelete }: TodoItemProps) {
     const [isEditing, setIsEditing] = useState(false);
     const [editTitle, setEditTitle] = useState(todo.title);
     const [editAmount, setEditAmount] = useState(todo.amount || "");
+    const [editScheduledAt, setEditScheduledAt] = useState(
+        todo.scheduled_at ? new Date(todo.scheduled_at).toISOString().slice(0, 16) : ""
+    );
     const editInputRef = useRef<HTMLInputElement>(null);
 
     // Focus input when entering edit mode
@@ -59,9 +62,12 @@ export function TodoItem({ todo, onToggle, onEdit, onDelete }: TodoItemProps) {
     const handleStartEdit = useCallback(() => {
         setEditTitle(todo.title);
         setEditAmount(todo.amount || "");
+        setEditScheduledAt(
+            todo.scheduled_at ? new Date(todo.scheduled_at).toISOString().slice(0, 16) : ""
+        );
         setIsEditing(true);
         setShowMenu(false);
-    }, [todo.title, todo.amount]);
+    }, [todo.title, todo.amount, todo.scheduled_at]);
 
     const handleSaveEdit = useCallback(() => {
         if (!editTitle.trim()) {
@@ -69,15 +75,18 @@ export function TodoItem({ todo, onToggle, onEdit, onDelete }: TodoItemProps) {
             setIsEditing(false);
             return;
         }
-        onEdit(todo.id, editTitle.trim(), editAmount || undefined);
+        onEdit(todo.id, editTitle.trim(), editAmount || undefined, editScheduledAt || undefined);
         setIsEditing(false);
-    }, [todo.id, editTitle, editAmount, onEdit]);
+    }, [todo.id, editTitle, editAmount, editScheduledAt, onEdit]);
 
     const handleCancelEdit = useCallback(() => {
         setEditTitle(todo.title);
         setEditAmount(todo.amount || "");
+        setEditScheduledAt(
+            todo.scheduled_at ? new Date(todo.scheduled_at).toISOString().slice(0, 16) : ""
+        );
         setIsEditing(false);
-    }, [todo.title, todo.amount]);
+    }, [todo.title, todo.amount, todo.scheduled_at]);
 
     const handleEditKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === "Enter") {
@@ -140,31 +149,51 @@ export function TodoItem({ todo, onToggle, onEdit, onDelete }: TodoItemProps) {
                             color: colors.text.primary,
                         }}
                     />
-                    <div className="flex justify-end gap-2 mt-2">
-                        <motion.button
-                            whileTap={{ scale: 0.97 }}
-                            onClick={handleCancelEdit}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs cursor-pointer"
-                            style={{ color: colors.text.secondary }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.hover}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    <div>
+                        <label
+                            className="text-xs block mb-1"
+                            style={{ color: colors.text.tertiary }}
                         >
-                            <RiCloseLine size={12} />
-                            Cancel
-                        </motion.button>
-                        <motion.button
-                            whileTap={{ scale: 0.97 }}
-                            onClick={handleSaveEdit}
-                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
+                            Date/Time
+                        </label>
+                        <input
+                            type="datetime-local"
+                            value={editScheduledAt}
+                            onChange={(e) => setEditScheduledAt(e.target.value)}
+                            onKeyDown={handleEditKeyDown}
+                            className="w-full p-2 rounded-lg text-sm outline-none"
                             style={{
-                                background: colors.accent.primary,
-                                color: "#fff",
+                                background: colors.bg.surface,
+                                border: `1px solid ${colors.border.subtle}`,
+                                color: colors.text.primary,
                             }}
-                        >
-                            <RiCheckDoubleLine size={12} />
-                            Save
-                        </motion.button>
+                        />
                     </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-2">
+                    <motion.button
+                        whileTap={{ scale: 0.97 }}
+                        onClick={handleCancelEdit}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs cursor-pointer"
+                        style={{ color: colors.text.secondary }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.hover}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                        <RiCloseLine size={12} />
+                        Cancel
+                    </motion.button>
+                    <motion.button
+                        whileTap={{ scale: 0.97 }}
+                        onClick={handleSaveEdit}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer"
+                        style={{
+                            background: colors.accent.primary,
+                            color: "#fff",
+                        }}
+                    >
+                        <RiCheckDoubleLine size={12} />
+                        Save
+                    </motion.button>
                 </div>
             </motion.div>
         );
