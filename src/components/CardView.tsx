@@ -6,68 +6,13 @@ import type { CardWithTodos, Todo } from "@/lib/types";
 import { useCurrency } from "@/hooks/useCurrency";
 import { CurrencySelector } from "./CurrencySelector";
 import { TodoItem } from "./TodoItem";
-import { RiArrowLeftLine, RiAddLine, RiSearchLine, RiSortAsc, RiSortDesc, RiCloseLine } from "@remixicon/react";
+import { RiArrowLeftLine, RiAddLine, RiSearchLine, RiSortAsc, RiSortDesc, RiCloseLine, RiExchangeLine } from "@remixicon/react";
+import { colors } from "@/styles/tokens";
+import { safeDecimal, formatAmount, formatWithCommas, parseShorthand, formatGenZ, isValidAmountInput, sumAmounts } from "@/utils/amount";
+import { isAndroid } from "@/utils/platform";
+
 import Decimal from "decimal.js";
 import * as api from "@/lib/api";
-import { colors } from "@/styles/tokens";
-
-function safeDecimal(value: string | null | undefined): Decimal {
-    try {
-        return new Decimal(value || "0");
-    } catch {
-        return new Decimal(0);
-    }
-}
-
-// Format amount to 2 decimal places
-function formatAmount(value: string): string {
-    const num = parseFloat(value);
-    if (isNaN(num)) return "0.00";
-    return num.toFixed(2);
-}
-
-// Format number with thousand separators
-function formatWithCommas(value: string): string {
-    const num = parseFloat(value);
-    if (isNaN(num)) return "0.00";
-    return num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// Parse shorthand input (k, m, b)
-function parseShorthand(value: string): { num: number; isValid: boolean; overLimit: boolean } {
-    const clean = value.replace(/,/g, "").trim().toLowerCase();
-    if (clean === "" || clean === "-") return { num: 0, isValid: true, overLimit: false };
-
-    const match = clean.match(/^(-?\d*\.?\d+)(k|m|b)?$/);
-    if (!match) return { num: 0, isValid: false, overLimit: false };
-
-    let num = parseFloat(match[1]);
-    const suffix = match[2];
-
-    if (suffix === "k") num *= 1000;
-    else if (suffix === "m") num *= 1000000;
-    else if (suffix === "b") num *= 1000000000;
-
-    const overLimit = num > 1000000000;
-    return { num, isValid: true, overLimit };
-}
-
-// Format as Gen Z friendly display (12.3k, 1.5m, etc.)
-function formatGenZ(value: number): string {
-    const absVal = Math.abs(value);
-    const sign = value < 0 ? "-" : "";
-    if (absVal >= 1000000000) return `${sign}${(value / 1000000000).toFixed(1)}b`;
-    if (absVal >= 1000000) return `${sign}${(value / 1000000).toFixed(1)}m`;
-    if (absVal >= 1000) return `${sign}${(value / 1000).toFixed(1)}k`;
-    return value.toFixed(2);
-}
-
-// Validate numeric input (allow digits, decimal point, minus sign, and k/m/b suffix)
-function isValidAmountInput(value: string): boolean {
-    if (value === "" || value === "-") return true;
-    const clean = value.replace(/,/g, "").toLowerCase();
-    return /^-?\d*\.?\d*[kmb]?$/.test(clean);
-}
 
 interface CardViewProps {
     card: CardWithTodos;
@@ -79,7 +24,7 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
     const { currency, setCurrency, symbol, allCurrencies } = useCurrency();
     const [showCurrencySelector, setShowCurrencySelector] = useState(false);
     const [title, setTitle] = useState(card.title || "");
-    const [amount, setAmount] = useState(formatAmount(card.amount));
+    const [amount, setAmount] = useState(formatWithCommas(card.amount));
     const [todos, setTodos] = useState<Todo[]>(card.todos);
     const [showAddForm, setShowAddForm] = useState(false);
     const [newTodoTitle, setNewTodoTitle] = useState("");
@@ -113,7 +58,7 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
 
     useEffect(() => {
         setTitle(card.title || "");
-        setAmount(formatAmount(card.amount));
+        setAmount(formatWithCommas(card.amount));
         setTodos(card.todos);
     }, [card]);
 
@@ -138,18 +83,18 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
     }, []);
 
     const handleAmountBlur = useCallback(async () => {
-        // Parse shorthand (k, m, b)
+        // Parse shorthand (k, m, b) - also handles stripping commas
         const parsed = parseShorthand(amount);
 
         // Check 1B limit
         if (parsed.overLimit) {
             alert("You should hire an accountant for that amount of money 🫠🙃");
-            setAmount(formatAmount(card.amount)); // Reset to original
+            setAmount(formatWithCommas(card.amount)); // Reset to original
             return;
         }
 
         const formatted = formatAmount(parsed.num.toString());
-        setAmount(formatted);
+        setAmount(formatWithCommas(parsed.num.toString())); // Display with commas
 
         if (formatted !== formatAmount(card.amount)) {
             await api.updateCard(card.id, undefined, formatted);
@@ -171,7 +116,7 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
             );
 
             setTodos((prev) => [...prev, result.todo]);
-            setAmount(formatAmount(result.updated_card.amount));
+            setAmount(formatWithCommas(result.updated_card.amount));
             setNewTodoTitle("");
             setNewTodoAmount("");
             setScheduledAt("");
@@ -278,14 +223,20 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                         Main Balance
                     </label>
                     <div className="flex items-baseline gap-1.5">
-                        <button
+                        <motion.button
                             onClick={() => setShowCurrencySelector(true)}
-                            className="text-xl font-medium cursor-pointer hover:opacity-80 transition-opacity px-1 -ml-1 rounded flex items-center gap-1"
-                            style={{ color: colors.text.tertiary }}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="text-xl font-medium cursor-pointer px-2 py-1 -ml-1 rounded-lg flex items-center gap-1.5 transition-all"
+                            style={{
+                                color: colors.accent.primary,
+                                background: colors.accent.muted,
+                            }}
                             title="Click to change currency"
                         >
                             {symbol}
-                        </button>
+                            <RiExchangeLine size={14} style={{ opacity: 0.7 }} />
+                        </motion.button>
                         <input
                             type="text"
                             inputMode="decimal"
@@ -299,11 +250,13 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                             }}
                         />
                     </div>
-                    {/* Gen Z friendly display & shorthand tip */}
+                    {/* Gen Z friendly display & shorthand tip (hidden on Android) */}
                     <div className="flex justify-between items-center mt-2">
-                        <span className="text-xs" style={{ color: colors.text.tertiary }}>
-                            Tip: Use k, m, b (e.g., 100k = 100,000)
-                        </span>
+                        {!isAndroid() && (
+                            <span className="text-xs" style={{ color: colors.text.tertiary }}>
+                                Tip: Use k, m, b (e.g., 100k = 100,000)
+                            </span>
+                        )}
                         {parseFloat(amount) >= 1000 && (
                             <span className="text-xs font-medium" style={{ color: colors.accent.primary }}>
                                 ≈ {formatGenZ(parseFloat(amount))}
@@ -329,7 +282,7 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                             className="font-medium tabular-nums"
                             style={{ color: colors.text.primary }}
                         >
-                            {symbol}{totalDeducted.toFixed(2)}
+                            {symbol}{formatWithCommas(totalDeducted.toString())}
                         </span>
                     </div>
                     <div
@@ -347,7 +300,7 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                                         : colors.status.positive,
                                 }}
                             >
-                                {symbol}{remaining.toFixed(2)}
+                                {symbol}{formatWithCommas(remaining.toString())}
                             </span>
                             {Math.abs(remaining.toNumber()) >= 1000 && (
                                 <div
@@ -424,35 +377,41 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                                     >
                                         Date/Time
                                     </label>
-                                    <div className="flex items-center gap-2">
-                                        <label
-                                            className="flex items-center gap-1.5 text-xs cursor-pointer"
-                                            style={{ color: colors.text.secondary }}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={!useCurrentTime}
-                                                onChange={(e) => setUseCurrentTime(!e.target.checked)}
-                                                className="accent-emerald-500"
-                                            />
-                                            Schedule
-                                        </label>
-                                        {!useCurrentTime && (
-                                            <input
-                                                type="datetime-local"
-                                                value={scheduledAt}
-                                                onChange={(e) => setScheduledAt(e.target.value)}
-                                                className="flex-1 p-1 rounded text-xs outline-none"
-                                                style={{
-                                                    background: colors.bg.surface,
-                                                    border: `1px solid ${colors.border.subtle}`,
-                                                    color: colors.text.primary,
-                                                }}
-                                            />
-                                        )}
-                                    </div>
+                                    <label
+                                        className="flex items-center gap-1.5 text-xs cursor-pointer p-2 rounded-lg"
+                                        style={{
+                                            color: colors.text.secondary,
+                                            background: colors.bg.surface,
+                                            border: `1px solid ${colors.border.subtle}`,
+                                        }}
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={!useCurrentTime}
+                                            onChange={(e) => setUseCurrentTime(!e.target.checked)}
+                                            className="accent-emerald-500"
+                                        />
+                                        Schedule
+                                    </label>
                                 </div>
                             </div>
+
+                            {/* Datetime picker - shown when Schedule is checked */}
+                            {!useCurrentTime && (
+                                <div className="mb-3">
+                                    <input
+                                        type="datetime-local"
+                                        value={scheduledAt}
+                                        onChange={(e) => setScheduledAt(e.target.value)}
+                                        className="w-full p-2 rounded-lg text-sm outline-none"
+                                        style={{
+                                            background: colors.bg.surface,
+                                            border: `1px solid ${colors.border.subtle}`,
+                                            color: colors.text.primary,
+                                        }}
+                                    />
+                                </div>
+                            )}
 
                             <div className="flex justify-end gap-2">
                                 <motion.button
@@ -644,13 +603,6 @@ export function CardView({ card, onBack, onUpdate }: CardViewProps) {
                         </button>
                     </div>
 
-                    {/* Tip */}
-                    <p
-                        className="text-xs mt-3 text-center"
-                        style={{ color: colors.text.tertiary }}
-                    >
-                        💡 Right-click on an item to edit or delete
-                    </p>
                 </section>
             </main>
 

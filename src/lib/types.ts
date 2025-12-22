@@ -4,6 +4,7 @@ export const CardSchema = z.object({
     id: z.string(),
     title: z.string().nullable(),
     amount: z.string(),
+    locked_amount: z.string().nullable(),
     archived: z.boolean(),
     created_at: z.string(),
     updated_at: z.string(),

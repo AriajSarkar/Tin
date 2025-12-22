@@ -1,11 +1,13 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import { motion } from "motion/react";
 import type { Card } from "@/lib/types";
 import { useCurrency } from "@/hooks/useCurrency";
-import { RiDeleteBinLine, RiCheckboxCircleFill, RiCheckboxBlankCircleLine } from "@remixicon/react";
+import { RiCheckboxCircleFill, RiCheckboxBlankCircleLine } from "@remixicon/react";
 import Decimal from "decimal.js";
 import { colors } from "@/styles/tokens";
+import { formatWithCommas } from "@/utils/amount";
 
 function safeDecimal(value: string | null | undefined): Decimal {
     try {
@@ -23,6 +25,7 @@ interface CardItemProps {
     isSelectionMode?: boolean;
     isSelected?: boolean;
     onToggleSelect?: () => void;
+    onEnterSelectionMode?: () => void; // Called on hold/right-click to enter selection mode and select this card
 }
 
 export function CardItem({
@@ -32,11 +35,15 @@ export function CardItem({
     isSelectionMode = false,
     isSelected = false,
     onToggleSelect,
+    onEnterSelectionMode,
 }: CardItemProps) {
     const { symbol } = useCurrency();
     const amount = safeDecimal(card.amount);
     const isNegative = amount.isNegative();
-    const formattedAmount = amount.toFixed(2);
+    const formattedAmount = formatWithCommas(card.amount);
+
+    // Long-press timer
+    const [pressTimer, setPressTimer] = useState<NodeJS.Timeout | null>(null);
 
     const timeSince = (dateString: string) => {
         const date = new Date(dateString);
@@ -59,6 +66,29 @@ export function CardItem({
         }
     };
 
+    // Long-press handler - enters selection mode and selects this card
+    const handlePressStart = useCallback(() => {
+        if (isSelectionMode) return; // Already in selection mode
+        const timer = setTimeout(() => {
+            onEnterSelectionMode?.();
+        }, 500);
+        setPressTimer(timer);
+    }, [isSelectionMode, onEnterSelectionMode]);
+
+    const handlePressEnd = useCallback(() => {
+        if (pressTimer) {
+            clearTimeout(pressTimer);
+            setPressTimer(null);
+        }
+    }, [pressTimer]);
+
+    // Right-click - enters selection mode and selects this card
+    const handleContextMenu = useCallback((e: React.MouseEvent) => {
+        if (isSelectionMode) return;
+        e.preventDefault();
+        onEnterSelectionMode?.();
+    }, [isSelectionMode, onEnterSelectionMode]);
+
     return (
         <motion.article
             initial={{ opacity: 0, y: 6 }}
@@ -66,6 +96,10 @@ export function CardItem({
             whileHover={{ y: -2 }}
             whileTap={{ scale: 0.995 }}
             onClick={handleClick}
+            onPointerDown={handlePressStart}
+            onPointerUp={handlePressEnd}
+            onPointerLeave={handlePressEnd}
+            onContextMenu={handleContextMenu}
             className="relative group cursor-pointer rounded-xl overflow-hidden"
             style={{
                 background: colors.bg.raised,
@@ -129,25 +163,6 @@ export function CardItem({
                             {timeSince(card.created_at)}
                         </p>
                     </div>
-
-                    {/* Delete button - only show when not in selection mode */}
-                    {!isSelectionMode && (
-                        <motion.button
-                            initial={{ opacity: 0 }}
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onDelete();
-                            }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded transition-opacity"
-                            style={{ color: colors.text.tertiary }}
-                            onMouseEnter={(e) => e.currentTarget.style.color = colors.status.negative}
-                            onMouseLeave={(e) => e.currentTarget.style.color = colors.text.tertiary}
-                        >
-                            <RiDeleteBinLine size={14} />
-                        </motion.button>
-                    )}
                 </div>
 
                 {/* Amount - the visual focus */}

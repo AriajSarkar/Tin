@@ -97,7 +97,7 @@ export function TodoItem({ todo, onToggle, onEdit, onDelete }: TodoItemProps) {
     }, [handleSaveEdit, handleCancelEdit]);
 
     const { symbol } = useCurrency();
-    const formattedAmount = todo.amount ? `${symbol}${parseFloat(todo.amount).toFixed(2)}` : null;
+    const formattedAmount = todo.amount ? `${symbol}${parseFloat(todo.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : null;
     const formattedDate = todo.scheduled_at
         ? new Date(todo.scheduled_at).toLocaleDateString()
         : null;

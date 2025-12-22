@@ -1,0 +1,150 @@
+# Docker Compose for Tauri Multi-Platform Builds
+# 
+# Usage:
+#   docker-compose build                  # Build the image once
+#   docker-compose up build-android       # Build Android APK
+#   docker-compose up test                # Run tests only
+#
+# Note: All services share the same image (tin-builder)
+
+services:
+  # ============================================
+  # Shared Builder Image
+  # ============================================
+  builder:
+    image: tin-builder:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: echo "Base image ready"
+
+  # ============================================
+  # Android Build (Active)
+  # ============================================
+  build-android:
+    image: tin-builder:latest
+    depends_on:
+      builder:
+        condition: service_completed_successfully
+    volumes:
+      - .:/app
+      # ISOLATION: Prevent container from messing up host files
+      - /app/node_modules
+      - /app/src-tauri/target
+      # CACHES: Speed up builds
+      - cargo-cache:/root/.cargo/registry
+      - gradle-cache:/root/.gradle
+    working_dir: /app
+    environment:
+      - CI=true
+      - ANDROID_HOME=/opt/android-sdk
+      - NDK_HOME=/opt/android-sdk/ndk/25.2.9519653
+      - PNPM_HOME=/root/.local/share/pnpm
+      - NPM_CONFIG_STORE_DIR=/root/.local/share/pnpm/store
+      - NPM_CONFIG_CACHE=/root/.local/share/pnpm/cache
+    command: |
+      bash -c "
+        echo '📦 Installing project dependencies...'
+        pnpm install --frozen-lockfile
+
+        echo '🔧 Setting up Android signing...'
+        if [ -f /app/_signing/tin-release.jks ]; then
+          mkdir -p /app/src-tauri/gen/android/app
+          cp /app/_signing/tin-release.jks /app/src-tauri/gen/android/app/tin-release.jks
+          echo 'keyAlias=tin' > /app/src-tauri/gen/android/app/key.properties
+          echo 'storePassword=hjP2TLGLmAm7Y58S75APHpljYxfqOx4blMqktGDGHDg=' >> /app/src-tauri/gen/android/app/key.properties
+          echo 'keyPassword=hjP2TLGLmAm7Y58S75APHpljYxfqOx4blMqktGDGHDg=' >> /app/src-tauri/gen/android/app/key.properties
+          echo 'storeFile=tin-release.jks' >> /app/src-tauri/gen/android/app/key.properties
+          echo '✅ Signing configured from _signing folder'
+        else
+          echo '⚠️ No keystore found in _signing/ - building unsigned APK'
+        fi
+
+        echo '🏗️ Building Android APK...'
+        pnpm tauri android build --apk true
+
+        echo '✅ Build complete!'
+        echo '📱 APK location: src-tauri/gen/android/app/build/outputs/apk/'
+      "
+
+  # ============================================
+  # Test Runner
+  # ============================================
+  test:
+    image: tin-builder:latest
+    depends_on:
+      builder:
+        condition: service_completed_successfully
+    volumes:
+      - .:/app
+      # ISOLATION: Prevent container from messing up host files
+      - /app/node_modules
+      - /app/src-tauri/target
+      # CACHES
+      - cargo-cache:/root/.cargo/registry
+    working_dir: /app
+    environment:
+      - CI=true
+      - PNPM_HOME=/root/.local/share/pnpm
+      - NPM_CONFIG_STORE_DIR=/root/.local/share/pnpm/store
+      - NPM_CONFIG_CACHE=/root/.local/share/pnpm/cache
+    command: |
+      bash -c "
+        echo '📦 Installing dependencies...'
+        pnpm install --frozen-lockfile
+
+        echo '🧪 Running TypeScript tests...'
+        pnpm test:ts
+
+        echo '🦀 Running Rust tests...'
+        cd src-tauri && cargo test --all-targets
+
+        echo '✅ All tests passed!'
+      "
+
+  # ============================================
+  # Windows Build (Commented - requires Windows host)
+  # ============================================
+  # build-windows:
+  #   # Windows containers require Windows host machine
+  #   # Use GitHub Actions windows-latest runner instead
+
+  # ============================================
+  # macOS Build (Commented - requires macOS host)
+  # ============================================
+  # build-macos:
+  #   # Docker cannot run macOS containers (Apple licensing)
+  #   # Use GitHub Actions macos-latest runner instead
+
+  # ============================================
+  # iOS Build (Commented - requires macOS host + Xcode)
+  # ============================================
+  # build-ios:
+  #   # Docker cannot run macOS containers (Apple licensing)
+  #   # Use GitHub Actions macos-latest runner instead
+
+  # ============================================
+  # Linux Build (Commented - but works in Docker)
+  # ============================================
+  # build-linux:
+  #   image: tin-builder:latest
+  #   depends_on:
+  #     builder:
+  #       condition: service_completed_successfully
+  #   volumes:
+  #     - .:/app
+  #     - /app/node_modules
+  #     - /app/src-tauri/target
+  #     - cargo-cache:/root/.cargo/registry
+  #   working_dir: /app
+  #   environment:
+  #     - CI=true
+  #   command: |
+  #     bash -c "
+  #       pnpm install --frozen-lockfile
+  #       pnpm tauri build --bundles deb,appimage
+  #     "
+
+volumes:
+  cargo-cache:
+  gradle-cache:

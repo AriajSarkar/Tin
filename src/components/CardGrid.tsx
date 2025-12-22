@@ -10,6 +10,7 @@ interface CardGridProps {
     cards: Card[];
     onCardClick: (cardId: string) => void;
     onDeleteCard: (cardId: string) => void;
+    onEnterSelectionMode?: (cardId: string) => void;
     // Selection mode props
     isSelectionMode?: boolean;
     selectedIds?: Set<string>;
@@ -28,6 +29,7 @@ export function CardGrid({
     cards,
     onCardClick,
     onDeleteCard,
+    onEnterSelectionMode,
     isSelectionMode = false,
     selectedIds = new Set(),
     onToggleSelect,
@@ -97,6 +99,7 @@ export function CardGrid({
                             isSelectionMode={isSelectionMode}
                             isSelected={selectedIds.has(card.id)}
                             onToggleSelect={() => onToggleSelect?.(card.id)}
+                            onEnterSelectionMode={() => onEnterSelectionMode?.(card.id)}
                         />
                     </motion.div>
                 ))}

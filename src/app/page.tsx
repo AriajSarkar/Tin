@@ -287,6 +287,13 @@ export default function Home() {
     setSelectionAction(null);
   }, []);
 
+  // Handler for entering selection mode via hold/right-click on a card
+  const handleEnterSelectionModeWithCard = useCallback((cardId: string) => {
+    setIsSelectionMode(true);
+    setSelectedCardIds(new Set([cardId]));
+    setSelectionAction(null); // Show both options
+  }, []);
+
   // Multi-delete with themed modal - works for both tabs
   const handleDeleteSelected = useCallback(() => {
     if (selectedCardIds.size === 0) return;
@@ -427,6 +434,7 @@ export default function Home() {
                   cards={displayedCards}
                   onCardClick={handleCardClick}
                   onDeleteCard={handleDeleteCard}
+                  onEnterSelectionMode={handleEnterSelectionModeWithCard}
                   isSelectionMode={isSelectionMode}
                   selectedIds={selectedCardIds}
                   onToggleSelect={handleToggleSelect}
