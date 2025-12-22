@@ -28,10 +28,8 @@ services:
         condition: service_completed_successfully
     volumes:
       - .:/app
-      # ISOLATION: Prevent container from messing up host files
       - /app/node_modules
       - /app/src-tauri/target
-      # CACHES: Speed up builds
       - cargo-cache:/root/.cargo/registry
       - gradle-cache:/root/.gradle
     working_dir: /app
@@ -42,22 +40,24 @@ services:
       - PNPM_HOME=/root/.local/share/pnpm
       - NPM_CONFIG_STORE_DIR=/root/.local/share/pnpm/store
       - NPM_CONFIG_CACHE=/root/.local/share/pnpm/cache
+      - ANDROID_STORE_PASSWORD=${ANDROID_STORE_PASSWORD}
+      - ANDROID_KEY_PASSWORD=${ANDROID_KEY_PASSWORD}
     command: |
       bash -c "
         echo '📦 Installing project dependencies...'
         pnpm install --frozen-lockfile
 
         echo '🔧 Setting up Android signing...'
-        if [ -f /app/_signing/tin-release.jks ]; then
+        if [ -f /app/_signing/tin-release.jks ] && [ -n \"\$ANDROID_STORE_PASSWORD\" ]; then
           mkdir -p /app/src-tauri/gen/android/app
           cp /app/_signing/tin-release.jks /app/src-tauri/gen/android/app/tin-release.jks
           echo 'keyAlias=tin' > /app/src-tauri/gen/android/app/key.properties
-          echo 'storePassword=hjP2TLGLmAm7Y58S75APHpljYxfqOx4blMqktGDGHDg=' >> /app/src-tauri/gen/android/app/key.properties
-          echo 'keyPassword=hjP2TLGLmAm7Y58S75APHpljYxfqOx4blMqktGDGHDg=' >> /app/src-tauri/gen/android/app/key.properties
+          echo \"storePassword=\$ANDROID_STORE_PASSWORD\" >> /app/src-tauri/gen/android/app/key.properties
+          echo \"keyPassword=\$ANDROID_KEY_PASSWORD\" >> /app/src-tauri/gen/android/app/key.properties
           echo 'storeFile=tin-release.jks' >> /app/src-tauri/gen/android/app/key.properties
           echo '✅ Signing configured from _signing folder'
         else
-          echo '⚠️ No keystore found in _signing/ - building unsigned APK'
+          echo '⚠️ No keystore or password found - building unsigned APK'
         fi
 
         echo '🏗️ Building Android APK...'
