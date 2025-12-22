@@ -31,7 +31,6 @@ interface CardItemProps {
 export function CardItem({
     card,
     onClick,
-    onDelete,
     isSelectionMode = false,
     isSelected = false,
     onToggleSelect,

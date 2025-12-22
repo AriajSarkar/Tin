@@ -51,8 +51,7 @@ export default function Home() {
     onConfirm: () => { },
   });
 
-  // Pending delete state (for single card delete)
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
 
   const loadData = useCallback(async () => {
     try {
@@ -212,7 +211,7 @@ export default function Home() {
 
   // Single card delete with themed modal
   const handleDeleteCard = useCallback((cardId: string) => {
-    setPendingDeleteId(cardId);
+
     setConfirmState({
       isOpen: true,
       title: "Delete Card",
@@ -230,11 +229,11 @@ export default function Home() {
         } catch (error) {
           console.error("Failed to delete card:", error);
         }
-        setPendingDeleteId(null);
+
         setConfirmState(prev => ({ ...prev, isOpen: false }));
       },
     });
-  }, []);
+  }, [selectedCard?.id]);
 
   const handleBack = useCallback(() => {
     setSelectedCard(null);
@@ -251,15 +250,6 @@ export default function Home() {
     setChanges(changesData);
   }, [selectedCard]);
 
-  // Selection mode handlers
-  const handleEnterEditMode = useCallback(() => {
-    setIsSelectionMode((prev) => !prev);
-    if (isSelectionMode) {
-      // Exiting - clear selection
-      setSelectedCardIds(new Set());
-      setSelectionAction(null);
-    }
-  }, [isSelectionMode]);
 
   const handleToggleSelect = useCallback((cardId: string) => {
     setSelectedCardIds((prev) => {
@@ -350,20 +340,10 @@ export default function Home() {
     }
   }, [selectedCardIds, handleExitSelectionMode, loadArchivedCards, loadData]);
 
-  // TopBar action handlers - start selection mode with specific action
-  const handleTopBarDeleteSelected = useCallback(() => {
-    setIsSelectionMode(true);
-    setSelectionAction("delete");
-  }, []);
-
-  const handleTopBarMoveToSaved = useCallback(() => {
-    setIsSelectionMode(true);
-    setSelectionAction("move");
-  }, []);
 
   const handleCloseConfirm = useCallback(() => {
     setConfirmState(prev => ({ ...prev, isOpen: false }));
-    setPendingDeleteId(null);
+
   }, []);
 
   if (isLoading) {
@@ -410,10 +390,6 @@ export default function Home() {
               onAddCard={handleAddCard}
               activeTab={activeTab}
               onTabChange={handleTabChange}
-              onEnterEditMode={handleEnterEditMode}
-              onDeleteSelected={handleTopBarDeleteSelected}
-              onMoveToSaved={handleTopBarMoveToSaved}
-              isEditMode={isSelectionMode}
             />
 
             <main className="max-w-2xl mx-auto px-4 py-5">

@@ -8,7 +8,7 @@ import { CurrencySelector } from "./CurrencySelector";
 import { TodoItem } from "./TodoItem";
 import { RiArrowLeftLine, RiAddLine, RiSearchLine, RiSortAsc, RiSortDesc, RiCloseLine, RiExchangeLine } from "@remixicon/react";
 import { colors } from "@/styles/tokens";
-import { safeDecimal, formatAmount, formatWithCommas, parseShorthand, formatGenZ, isValidAmountInput, sumAmounts } from "@/utils/amount";
+import { safeDecimal, formatAmount, formatWithCommas, parseShorthand, formatGenZ, isValidAmountInput } from "@/utils/amount";
 import { isAndroid } from "@/utils/platform";
 
 import Decimal from "decimal.js";

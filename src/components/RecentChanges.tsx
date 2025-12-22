@@ -2,7 +2,7 @@
 
 import { motion } from "motion/react";
 import type { ChangeLog } from "@/lib/types";
-import { RiAddLine, RiEditLine, RiDeleteBinLine, RiArchiveLine, RiCheckLine } from "@remixicon/react";
+import { RiAddLine, RiEditLine, RiDeleteBinLine, RiArchiveLine} from "@remixicon/react";
 import { colors } from "@/styles/tokens";
 
 interface RecentChangesProps {

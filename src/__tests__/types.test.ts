@@ -51,13 +51,13 @@ describe("CardSchema", () => {
     });
 
     it("should reject missing id", () => {
-        const { id, ...cardWithoutId } = validCard;
+        const { id: _id, ...cardWithoutId } = validCard;
         const result = CardSchema.safeParse(cardWithoutId);
         expect(result.success).toBe(false);
     });
 
     it("should reject missing amount", () => {
-        const { amount, ...cardWithoutAmount } = validCard;
+        const { amount: _amount, ...cardWithoutAmount } = validCard;
         const result = CardSchema.safeParse(cardWithoutAmount);
         expect(result.success).toBe(false);
     });
@@ -68,7 +68,7 @@ describe("CardSchema", () => {
     });
 
     it("should reject missing timestamps", () => {
-        const { created_at, ...cardWithoutTimestamp } = validCard;
+        const { created_at: _created_at, ...cardWithoutTimestamp } = validCard;
         const result = CardSchema.safeParse(cardWithoutTimestamp);
         expect(result.success).toBe(false);
     });
@@ -115,7 +115,7 @@ describe("TodoSchema", () => {
     });
 
     it("should reject missing card_id", () => {
-        const { card_id, ...todoWithoutCardId } = validTodo;
+        const { card_id: _card_id, ...todoWithoutCardId } = validTodo;
         const result = TodoSchema.safeParse(todoWithoutCardId);
         expect(result.success).toBe(false);
     });
@@ -188,7 +188,7 @@ describe("CardWithTodosSchema", () => {
     });
 
     it("should reject missing todos array", () => {
-        const { todos, ...cardWithoutTodos } = validCardWithTodos;
+        const { todos: _todos, ...cardWithoutTodos } = validCardWithTodos;
         const result = CardWithTodosSchema.safeParse(cardWithoutTodos);
         expect(result.success).toBe(false);
     });
@@ -238,7 +238,7 @@ describe("ChangeLogSchema", () => {
     });
 
     it("should reject missing kind", () => {
-        const { kind, ...logWithoutKind } = validChangeLog;
+        const { kind: _kind, ...logWithoutKind } = validChangeLog;
         const result = ChangeLogSchema.safeParse(logWithoutKind);
         expect(result.success).toBe(false);
     });

@@ -11,10 +11,6 @@ import {
     RiMenuLine,
     RiCloseLine,
     RiComputerLine,
-    RiMore2Fill,
-    RiCheckboxMultipleLine,
-    RiDeleteBinLine,
-    RiArchiveLine
 } from "@remixicon/react";
 import { colors } from "@/styles/tokens";
 import { Sidebar, useSwipeToOpenSidebar } from "./Sidebar";
@@ -25,10 +21,6 @@ interface TopBarProps {
     onAddCard: () => void;
     activeTab?: "recent" | "saved";
     onTabChange?: (tab: "recent" | "saved") => void;
-    onEnterEditMode?: () => void;
-    onDeleteSelected?: () => void;
-    onMoveToSaved?: () => void;
-    isEditMode?: boolean;
 }
 
 export function TopBar({
@@ -36,15 +28,10 @@ export function TopBar({
     onAddCard,
     activeTab = "recent",
     onTabChange,
-    onEnterEditMode,
-    onDeleteSelected,
-    onMoveToSaved,
-    isEditMode = false
 }: TopBarProps) {
     const [searchQuery, setSearchQuery] = useState("");
     const [showSearch, setShowSearch] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
-    const [showActionsMenu, setShowActionsMenu] = useState(false);
     const [mounted, setMounted] = useState(false);
     const { theme, setTheme, resolvedTheme } = useTheme();
     const searchInputRef = useRef<HTMLInputElement>(null);

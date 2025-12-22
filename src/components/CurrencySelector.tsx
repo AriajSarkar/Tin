@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { RiCloseLine, RiSearchLine, RiCheckLine } from "@remixicon/react";
+import { RiCloseLine, RiCheckLine } from "@remixicon/react";
 import { colors } from "@/styles/tokens";
 import { type CurrencyInfo } from "@/hooks/useCurrency";
 

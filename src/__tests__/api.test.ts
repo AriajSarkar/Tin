@@ -3,7 +3,7 @@
  * These tests ensure Tauri invoke calls are correctly made and responses validated
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { mockInvoke } from "./setup";
 
 // Import API functions
