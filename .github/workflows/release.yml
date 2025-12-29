@@ -107,6 +107,36 @@ jobs:
       - name: Build Windows NSIS
         run: pnpm tauri build --bundles nsis
 
+      # Self-sign the Windows executable to reduce Defender warnings
+      # Note: This creates a self-signed certificate - users may still see a warning
+      # but the app won't be blocked. For production, use SignPath (see below).
+      - name: Create Self-Signed Certificate
+        run: |
+          $cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject "CN=Tin App, O=AriajSarkar" -KeyUsage DigitalSignature -FriendlyName "Tin Code Signing" -CertStoreLocation "Cert:\CurrentUser\My" -NotAfter (Get-Date).AddYears(1)
+          $certPath = "Cert:\CurrentUser\My\$($cert.Thumbprint)"
+          $exePath = Get-ChildItem -Path "src-tauri\target\release\bundle\nsis\*.exe" -Recurse | Select-Object -First 1
+          Set-AuthenticodeSignature -FilePath $exePath.FullName -Certificate $cert -TimestampServer "http://timestamp.digicert.com"
+          Write-Host "Signed: $($exePath.FullName)"
+        shell: pwsh
+
+      # ============================================
+      # SignPath Code Signing (For Future Production Use)
+      # ============================================
+      # Uncomment and configure when you have a SignPath account:
+      # Free for open source: https://signpath.io
+      #
+      # - name: Sign with SignPath
+      #   uses: signpath/github-action-submit-signing-request@v1
+      #   with:
+      #     api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
+      #     organization-id: '${{ secrets.SIGNPATH_ORGANIZATION_ID }}'
+      #     project-slug: 'tin'
+      #     signing-policy-slug: 'release-signing'
+      #     artifact-configuration-slug: 'windows-exe'
+      #     github-artifact-id: 'windows-nsis'
+      #     wait-for-completion: true
+      #     output-artifact-directory: 'signed-artifacts'
+
       - name: Upload Windows Installer
         uses: actions/upload-artifact@v4
         with:
