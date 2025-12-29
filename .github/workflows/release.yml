@@ -29,6 +29,23 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Cache Android SDK & NDK
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.ANDROID_HOME }}/ndk
+            ${{ env.ANDROID_HOME }}/build-tools
+            ${{ env.ANDROID_HOME }}/platforms
+          key: android-sdk-${{ runner.os }}-ndk25
+          restore-keys: |
+            android-sdk-${{ runner.os }}-
+
+      - name: Install Android NDK
+        run: |
+          sdkmanager --install "ndk;25.2.9519653" "build-tools;34.0.0" "platforms;android-34"
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 

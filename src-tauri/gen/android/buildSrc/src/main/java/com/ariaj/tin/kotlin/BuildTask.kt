@@ -48,21 +48,22 @@ open class BuildTask : DefaultTask() {
         val rootDirRel = rootDirRel ?: throw GradleException("rootDirRel cannot be null")
         val target = target ?: throw GradleException("target cannot be null")
         val release = release ?: throw GradleException("release cannot be null")
-        val args = listOf("tauri", "android", "android-studio-script");
+        val tauriArgs = mutableListOf("tauri", "android", "android-studio-script")
+        
+        if (project.logger.isEnabled(LogLevel.DEBUG)) {
+            tauriArgs.add("-vv")
+        } else if (project.logger.isEnabled(LogLevel.INFO)) {
+            tauriArgs.add("-v")
+        }
+        if (release) {
+            tauriArgs.add("--release")
+        }
+        tauriArgs.addAll(listOf("--target", target))
 
-        project.exec {
-            workingDir(File(project.projectDir, rootDirRel))
-            executable(executable)
-            args(args)
-            if (project.logger.isEnabled(LogLevel.DEBUG)) {
-                args("-vv")
-            } else if (project.logger.isEnabled(LogLevel.INFO)) {
-                args("-v")
-            }
-            if (release) {
-                args("--release")
-            }
-            args(listOf("--target", target))
+        project.exec { execSpec ->
+            execSpec.workingDir(File(project.projectDir, rootDirRel))
+            execSpec.executable(executable)
+            execSpec.args(tauriArgs)
         }.assertNormalExitValue()
     }
 }
