@@ -1,6 +1,6 @@
 [package]
 name = "Tin"
-version = "0.1.3"
+version = "0.1.4"
 description = "Tin - Local-first expense tracker"
 authors = ["you"]
 license = "MIT"

@@ -5,6 +5,7 @@ import org.gradle.api.GradleException
 import org.gradle.api.logging.LogLevel
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.TaskAction
+import org.gradle.process.ExecSpec
 
 open class BuildTask : DefaultTask() {
     @Input
@@ -60,7 +61,7 @@ open class BuildTask : DefaultTask() {
         }
         tauriArgs.addAll(listOf("--target", target))
 
-        project.exec { execSpec ->
+        project.exec { execSpec: ExecSpec ->
             execSpec.workingDir(File(project.projectDir, rootDirRel))
             execSpec.executable(executable)
             execSpec.args(tauriArgs)
