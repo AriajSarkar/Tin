@@ -65,10 +65,10 @@ abstract class BuildTask : DefaultTask() {
         }
         tauriArgs.addAll(listOf("--target", target))
 
-        execOperations.exec {
-            it.workingDir(File(project.projectDir, rootDirRel))
-            it.executable(executable)
-            it.args(tauriArgs)
+        execOperations.exec { spec ->
+            spec.workingDir(File(project.projectDir, rootDirRel))
+            spec.executable(executable)
+            spec.args(tauriArgs)
         }.assertNormalExitValue()
     }
 }
