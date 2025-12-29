@@ -12,7 +12,21 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "src-tauri/target/**",
   ]),
+  // Custom rule overrides
+  {
+    rules: {
+      // Allow underscore-prefixed unused vars (common destructuring pattern)
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+      }],
+      // Disable false positive: setting state in useEffect for initialization is valid
+      "react-hooks/set-state-in-effect": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

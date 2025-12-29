@@ -1,87 +1,367 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { Icon } from "./Icon";
-import { motion } from "motion/react";
-import { useTheme } from "@/styles/theme";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { useTheme } from "next-themes";
+import {
+    RiSearchLine,
+    RiAddLine,
+    RiSunLine,
+    RiMoonLine,
+    RiMenuLine,
+    RiCloseLine,
+    RiComputerLine,
+} from "@remixicon/react";
+import { colors } from "@/styles/tokens";
+import { Sidebar, useSwipeToOpenSidebar } from "./Sidebar";
+import { SearchFilters, SearchFilterType } from "./SearchFilters";
 
 interface TopBarProps {
-    onSearch: (query: string) => void;
+    onSearch: (query: string, filter?: SearchFilterType, amountRange?: { min: string; max: string }, date?: string) => void;
     onAddCard: () => void;
+    activeTab?: "recent" | "saved";
+    onTabChange?: (tab: "recent" | "saved") => void;
 }
 
-export function TopBar({ onSearch, onAddCard }: TopBarProps) {
+export function TopBar({
+    onSearch,
+    onAddCard,
+    activeTab = "recent",
+    onTabChange,
+}: TopBarProps) {
     const [searchQuery, setSearchQuery] = useState("");
-    const { theme, toggleTheme } = useTheme();
+    const [showSearch, setShowSearch] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
+    const [mounted, setMounted] = useState(false);
+    const { theme, setTheme, resolvedTheme } = useTheme();
+    const searchInputRef = useRef<HTMLInputElement>(null);
 
-    const handleSearch = useCallback(
-        (e: React.FormEvent) => {
-            e.preventDefault();
-            onSearch(searchQuery);
-        },
-        [onSearch, searchQuery]
-    );
+    // Search filter state
+    const [searchFilter, setSearchFilter] = useState<SearchFilterType>("all");
+    const [amountRange, setAmountRange] = useState({ min: "", max: "" });
+    const [dateValue, setDateValue] = useState("");
+
+    // Avoid hydration mismatch
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    // Enable swipe-from-left-edge to open sidebar (Android)
+    useSwipeToOpenSidebar(useCallback(() => setShowMenu(true), []));
+
+    // Handle ESC key to close search/menu
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Close on ESC
+            if (e.key === "Escape") {
+                if (showSearch) {
+                    setShowSearch(false);
+                    setSearchQuery("");
+                    onSearch("");
+                }
+                if (showMenu) {
+                    setShowMenu(false);
+                }
+            }
+            // Toggle search on Ctrl+K / Cmd+K
+            if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+                e.preventDefault();
+                setShowSearch(prev => !prev);
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [showSearch, showMenu, onSearch]);
+
+    // Focus search input when opened
+    useEffect(() => {
+        if (showSearch && searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, [showSearch]);
+
+    // Close search on tap outside (mobile/touch devices only)
+    useEffect(() => {
+        const isTouchDevice = () => {
+            return 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+        };
+
+        if (!showSearch || !isTouchDevice()) return;
+
+        const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+            const target = e.target as HTMLElement;
+            // Check if click is outside search panel
+            const searchPanel = document.getElementById('search-panel');
+            if (searchPanel && !searchPanel.contains(target)) {
+                setShowSearch(false);
+                setSearchQuery("");
+                onSearch("");
+            }
+        };
+
+        // Use capture phase to catch event before it bubbles
+        document.addEventListener('touchstart', handleClickOutside, true);
+        return () => document.removeEventListener('touchstart', handleClickOutside, true);
+    }, [showSearch, onSearch]);
+
+    // Live search as user types
+    const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setSearchQuery(value);
+        onSearch(value, searchFilter, amountRange, dateValue);
+    }, [onSearch, searchFilter, amountRange, dateValue]);
+
+    // Trigger search when filter changes
+    const handleFilterChange = useCallback((filter: SearchFilterType) => {
+        setSearchFilter(filter);
+        onSearch(searchQuery, filter, amountRange, dateValue);
+    }, [onSearch, searchQuery, amountRange, dateValue]);
+
+    const handleAmountRangeChange = useCallback((range: { min: string; max: string }) => {
+        setAmountRange(range);
+        onSearch(searchQuery, searchFilter, range, dateValue);
+    }, [onSearch, searchQuery, searchFilter, dateValue]);
+
+    const handleDateChange = useCallback((date: string) => {
+        setDateValue(date);
+        onSearch(searchQuery, searchFilter, amountRange, date);
+    }, [onSearch, searchQuery, searchFilter, amountRange]);
+
+    const handleTabClick = useCallback((tab: "recent" | "saved") => {
+        onTabChange?.(tab);
+    }, [onTabChange]);
+
+    const cycleTheme = useCallback(() => {
+        // Toggle between system and dark (light theme coming later)
+        if (theme === "system") {
+            setTheme("dark");
+        } else {
+            setTheme("system");
+        }
+    }, [theme, setTheme]);
+
+    const getThemeIcon = () => {
+        if (!mounted) return <RiComputerLine size={16} />;
+
+        if (theme === "system") {
+            return <RiComputerLine size={16} />;
+        }
+        return resolvedTheme === "dark" ? <RiMoonLine size={16} /> : <RiSunLine size={16} />;
+    };
 
     return (
-        <motion.header
-            initial={{ y: -20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className="sticky top-0 z-50 backdrop-blur-xl bg-white/80 dark:bg-gray-900/80 border-b border-gray-200 dark:border-gray-800"
-        >
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex items-center justify-between h-16">
-                    <div className="flex items-center gap-3">
-                        <motion.div
-                            whileHover={{ scale: 1.05 }}
-                            className="flex items-center gap-2"
-                        >
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                                <Icon name="card" size={18} className="text-white" />
-                            </div>
-                            <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+        <>
+            <motion.header
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                style={{
+                    background: colors.bg.base,
+                    borderBottom: `1px solid ${colors.border.subtle}`,
+                    paddingTop: "env(safe-area-inset-top, 0px)", // Respect status bar
+                }}
+                className="sticky top-0 z-50"
+            >
+                <div className="max-w-3xl mx-auto px-4">
+                    <div className="flex items-center justify-between h-12">
+                        {/* Left: Hamburger + Logo */}
+                        <div className="flex items-center gap-2">
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => setShowMenu(true)}
+                                className="p-1.5 rounded-md cursor-pointer"
+                                style={{ color: colors.text.tertiary }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.hover}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                                <RiMenuLine size={18} />
+                            </motion.button>
+                            <span
+                                className="text-sm font-medium tracking-tight"
+                                style={{ color: colors.text.secondary }}
+                            >
                                 Tin
                             </span>
-                        </motion.div>
-                    </div>
-
-                    <form onSubmit={handleSearch} className="flex-1 max-w-md mx-8">
-                        <div className="relative">
-                            <Icon
-                                name="search"
-                                size={18}
-                                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                            />
-                            <input
-                                type="text"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                placeholder="Search cards, todos, or dates (after:2024-01-01)"
-                                className="w-full pl-10 pr-4 py-2 rounded-full bg-gray-100 dark:bg-gray-800 border border-transparent focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all text-sm text-gray-900 dark:text-gray-100 placeholder-gray-500"
-                            />
                         </div>
-                    </form>
 
-                    <div className="flex items-center gap-2">
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={toggleTheme}
-                            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        {/* Center: Recent / Saved toggle */}
+                        <div
+                            className="flex items-center gap-0.5 px-1 py-0.5 rounded-lg"
+                            style={{ background: colors.bg.surface }}
                         >
-                            {theme === "dark" ? "☀️" : "🌙"}
-                        </motion.button>
-                        <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={onAddCard}
-                            className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium text-sm shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30 transition-all"
-                        >
-                            <Icon name="plus" size={18} />
-                            New Card
-                        </motion.button>
+                            <motion.button
+                                whileTap={{ scale: 0.97 }}
+                                onClick={() => handleTabClick("recent")}
+                                className="px-3 py-1 text-xs font-medium rounded-md cursor-pointer transition-all duration-150"
+                                style={{
+                                    background: activeTab === "recent" ? colors.bg.hover : "transparent",
+                                    color: activeTab === "recent" ? colors.text.primary : colors.text.tertiary,
+                                }}
+                                onMouseEnter={(e) => {
+                                    if (activeTab !== "recent") {
+                                        e.currentTarget.style.color = colors.text.secondary;
+                                    }
+                                }}
+                                onMouseLeave={(e) => {
+                                    if (activeTab !== "recent") {
+                                        e.currentTarget.style.color = colors.text.tertiary;
+                                    }
+                                }}
+                            >
+                                Recent
+                            </motion.button>
+                            <motion.button
+                                whileTap={{ scale: 0.97 }}
+                                onClick={() => handleTabClick("saved")}
+                                className="px-3 py-1 text-xs font-medium rounded-md cursor-pointer transition-all duration-150"
+                                style={{
+                                    background: activeTab === "saved" ? colors.bg.hover : "transparent",
+                                    color: activeTab === "saved" ? colors.text.primary : colors.text.tertiary,
+                                }}
+                                onMouseEnter={(e) => {
+                                    if (activeTab !== "saved") {
+                                        e.currentTarget.style.color = colors.text.secondary;
+                                    }
+                                }}
+                                onMouseLeave={(e) => {
+                                    if (activeTab !== "saved") {
+                                        e.currentTarget.style.color = colors.text.tertiary;
+                                    }
+                                }}
+                            >
+                                Saved
+                            </motion.button>
+                        </div>
+
+                        {/* Right: Actions */}
+                        <div className="flex items-center gap-0.5">
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => setShowSearch(!showSearch)}
+                                className="p-2 rounded-md cursor-pointer transition-colors duration-150"
+                                style={{
+                                    color: showSearch ? colors.accent.primary : colors.text.tertiary,
+                                    background: showSearch ? colors.accent.muted : "transparent",
+                                }}
+                                onMouseEnter={(e) => {
+                                    if (!showSearch) e.currentTarget.style.background = colors.bg.hover;
+                                }}
+                                onMouseLeave={(e) => {
+                                    if (!showSearch) e.currentTarget.style.background = 'transparent';
+                                }}
+                            >
+                                <RiSearchLine size={16} />
+                            </motion.button>
+
+                            <motion.button
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={cycleTheme}
+                                className="hidden sm:block p-2 rounded-md cursor-pointer transition-colors duration-150"
+                                style={{ color: colors.text.tertiary }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = colors.bg.hover}
+                                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                title={mounted ? `Theme: ${theme}` : "Theme"}
+                            >
+                                {getThemeIcon()}
+                            </motion.button>
+
+
+                            <motion.button
+                                whileHover={{ y: -1 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={onAddCard}
+                                className="flex items-center gap-1 p-1.5 sm:px-2.5 sm:py-1.5 rounded-md text-xs font-medium ml-1 cursor-pointer transition-all duration-150"
+                                style={{
+                                    background: colors.accent.muted,
+                                    color: colors.accent.primary,
+                                }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = colors.accent.primary + "30"}
+                                onMouseLeave={(e) => e.currentTarget.style.background = colors.accent.muted}
+                            >
+                                <RiAddLine size={16} />
+                                <span className="hidden sm:inline">New</span>
+                            </motion.button>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </motion.header>
+
+                {/* Inline Search Bar */}
+                <AnimatePresence>
+                    {showSearch && (
+                        <motion.div
+                            id="search-panel"
+                            initial={{ scale: 0.95, opacity: 0, y: -10 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.95, opacity: 0, y: -10 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
+                            style={{ borderTop: `1px solid ${colors.border.subtle}` }}
+                        >
+                            <div className="max-w-3xl mx-auto px-4 py-2">
+                                <div className="flex items-start gap-2">
+                                    {/* Search Input */}
+                                    <div className="relative flex-1">
+                                        <input
+                                            ref={searchInputRef}
+                                            type="text"
+                                            value={searchQuery}
+                                            onChange={handleSearchChange}
+                                            placeholder="Search cards, todos, or dates..."
+                                            className="w-full px-4 py-2 text-sm rounded-lg outline-none"
+                                            style={{
+                                                background: colors.bg.surface,
+                                                border: `1px solid ${colors.border.subtle}`,
+                                                color: colors.text.primary,
+                                            }}
+                                        />
+                                        {searchQuery && (
+                                            <button
+                                                onClick={() => {
+                                                    setSearchQuery("");
+                                                    setSearchFilter("all");
+                                                    setAmountRange({ min: "", max: "" });
+                                                    setDateValue("");
+                                                    onSearch("");
+                                                    searchInputRef.current?.focus();
+                                                }}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2"
+                                                style={{ color: colors.text.tertiary }}
+                                            >
+                                                <RiCloseLine size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {/* Filter Dropdown */}
+                                    <SearchFilters
+                                        activeFilter={searchFilter}
+                                        onFilterChange={handleFilterChange}
+                                        amountRange={amountRange}
+                                        onAmountRangeChange={handleAmountRangeChange}
+                                        dateValue={dateValue}
+                                        onDateChange={handleDateChange}
+                                    />
+                                </div>
+                                <p
+                                    className="text-xs mt-1.5 px-1 hidden sm:block"
+                                    style={{ color: colors.text.tertiary }}
+                                >
+                                    Press <kbd className="px-1 py-0.5 rounded text-xs" style={{ background: colors.bg.hover }}>ESC</kbd> to close
+                                </p>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+            </motion.header>
+
+            {/* Sidebar Component */}
+            <Sidebar
+                isOpen={showMenu}
+                onClose={() => setShowMenu(false)}
+                activeTab={activeTab}
+                onTabChange={handleTabClick}
+            />
+        </>
     );
 }

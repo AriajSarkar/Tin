@@ -4,16 +4,16 @@ use thiserror::Error;
 pub enum AppError {
     #[error("Database error: {0}")]
     Database(#[from] rusqlite::Error),
-    
+
     #[error("Card not found: {0}")]
     CardNotFound(String),
-    
+
     #[error("Todo not found: {0}")]
     TodoNotFound(String),
-    
+
     #[error("Invalid amount: {0}")]
     InvalidAmount(String),
-    
+
     #[error("Internal error: {0}")]
     Internal(String),
 }

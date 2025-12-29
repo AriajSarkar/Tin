@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS Card (
     id TEXT PRIMARY KEY NOT NULL,
     title TEXT,
     amount REAL NOT NULL DEFAULT 0,
+    lockedAmount REAL,
     createdAt TEXT NOT NULL DEFAULT (datetime('now')),
     updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
     archivedAt TEXT,

@@ -16,7 +16,7 @@ fn now_iso() -> String {
 pub fn list_cards() -> Result<Vec<CardDto>, AppError> {
     with_db(|conn| {
         let mut stmt = conn.prepare(
-            "SELECT id, title, amount, archived, createdAt, updatedAt, archivedAt 
+            "SELECT id, title, amount, lockedAmount, archived, createdAt, updatedAt, archivedAt 
              FROM Card WHERE archived = 0 ORDER BY createdAt DESC",
         )?;
 
@@ -26,10 +26,38 @@ pub fn list_cards() -> Result<Vec<CardDto>, AppError> {
                     id: row.get(0)?,
                     title: row.get(1)?,
                     amount: format!("{:.6}", row.get::<_, f64>(2)?),
-                    archived: row.get::<_, i32>(3)? != 0,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
-                    archived_at: row.get(6)?,
+                    locked_amount: row.get::<_, Option<f64>>(3)?.map(|a| format!("{:.6}", a)),
+                    archived: row.get::<_, i32>(4)? != 0,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    archived_at: row.get(7)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(cards)
+    })
+}
+
+#[tauri::command]
+pub fn list_archived_cards() -> Result<Vec<CardDto>, AppError> {
+    with_db(|conn| {
+        let mut stmt = conn.prepare(
+            "SELECT id, title, amount, lockedAmount, archived, createdAt, updatedAt, archivedAt 
+             FROM Card WHERE archived = 1 ORDER BY archivedAt DESC",
+        )?;
+
+        let cards = stmt
+            .query_map([], |row| {
+                Ok(CardDto {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    amount: format!("{:.6}", row.get::<_, f64>(2)?),
+                    locked_amount: row.get::<_, Option<f64>>(3)?.map(|a| format!("{:.6}", a)),
+                    archived: row.get::<_, i32>(4)? != 0,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    archived_at: row.get(7)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -43,7 +71,7 @@ pub fn get_card(card_id: String) -> Result<CardWithTodosDto, AppError> {
     with_db(|conn| {
         let card = conn
             .query_row(
-                "SELECT id, title, amount, archived, createdAt, updatedAt, archivedAt 
+                "SELECT id, title, amount, lockedAmount, archived, createdAt, updatedAt, archivedAt 
              FROM Card WHERE id = ?1",
                 params![card_id],
                 |row| {
@@ -51,10 +79,11 @@ pub fn get_card(card_id: String) -> Result<CardWithTodosDto, AppError> {
                         id: row.get(0)?,
                         title: row.get(1)?,
                         amount: format!("{:.6}", row.get::<_, f64>(2)?),
-                        archived: row.get::<_, i32>(3)? != 0,
-                        created_at: row.get(4)?,
-                        updated_at: row.get(5)?,
-                        archived_at: row.get(6)?,
+                        locked_amount: row.get::<_, Option<f64>>(3)?.map(|a| format!("{:.6}", a)),
+                        archived: row.get::<_, i32>(4)? != 0,
+                        created_at: row.get(5)?,
+                        updated_at: row.get(6)?,
+                        archived_at: row.get(7)?,
                     })
                 },
             )
@@ -88,6 +117,7 @@ pub fn get_card(card_id: String) -> Result<CardWithTodosDto, AppError> {
             id: card.id,
             title: card.title,
             amount: card.amount,
+            locked_amount: card.locked_amount,
             archived: card.archived,
             created_at: card.created_at,
             updated_at: card.updated_at,
@@ -126,6 +156,7 @@ pub fn create_card(title: Option<String>, amount: String) -> Result<CardDto, App
             id: id.clone(),
             title,
             amount: format!("{:.6}", amount_f),
+            locked_amount: None,
             archived: false,
             created_at: now.clone(),
             updated_at: now,
@@ -178,17 +209,18 @@ pub fn update_card(
         tx.commit()?;
 
         let card = conn.query_row(
-            "SELECT id, title, amount, archived, createdAt, updatedAt, archivedAt FROM Card WHERE id = ?1",
+            "SELECT id, title, amount, lockedAmount, archived, createdAt, updatedAt, archivedAt FROM Card WHERE id = ?1",
             params![card_id],
             |row| {
                 Ok(CardDto {
                     id: row.get(0)?,
                     title: row.get(1)?,
                     amount: format!("{:.6}", row.get::<_, f64>(2)?),
-                    archived: row.get::<_, i32>(3)? != 0,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
-                    archived_at: row.get(6)?,
+                    locked_amount: row.get::<_, Option<f64>>(3)?.map(|a| format!("{:.6}", a)),
+                    archived: row.get::<_, i32>(4)? != 0,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    archived_at: row.get(7)?,
                 })
             },
         )?;
@@ -229,22 +261,21 @@ pub fn add_todo(
     with_db_mut(|conn| {
         let tx = conn.transaction()?;
 
-        let current_amount: f64 = tx
-            .query_row(
-                "SELECT amount FROM Card WHERE id = ?1",
-                params![card_id],
-                |row| row.get(0),
-            )
-            .map_err(|e| match e {
-                rusqlite::Error::QueryReturnedNoRows => AppError::CardNotFound(card_id.clone()),
-                _ => AppError::Database(e),
-            })?;
+        // Verify card exists (no deduction - lockedAmount is user-only editable)
+        tx.query_row(
+            "SELECT id FROM Card WHERE id = ?1",
+            params![card_id],
+            |_| Ok(()),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::CardNotFound(card_id.clone()),
+            _ => AppError::Database(e),
+        })?;
 
-        let new_card_amount = current_amount - todo_amount.unwrap_or(0.0);
-
+        // Update only updatedAt (NO amount deduction)
         tx.execute(
-            "UPDATE Card SET amount = ?1, updatedAt = ?2 WHERE id = ?3",
-            params![new_card_amount, now, card_id],
+            "UPDATE Card SET updatedAt = ?1 WHERE id = ?2",
+            params![now, card_id],
         )?;
 
         let max_order: i32 = tx
@@ -265,8 +296,7 @@ pub fn add_todo(
         let payload = serde_json::json!({
             "todo_id": todo_id,
             "title": title,
-            "amount": amount,
-            "card_amount_change": format!("{:.6} -> {:.6}", current_amount, new_card_amount)
+            "amount": amount
         });
         tx.execute(
             "INSERT INTO ChangeLog (id, cardId, kind, payload, createdAt) VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -288,17 +318,18 @@ pub fn add_todo(
         };
 
         let updated_card = conn.query_row(
-            "SELECT id, title, amount, archived, createdAt, updatedAt, archivedAt FROM Card WHERE id = ?1",
+            "SELECT id, title, amount, lockedAmount, archived, createdAt, updatedAt, archivedAt FROM Card WHERE id = ?1",
             params![card_id],
             |row| {
                 Ok(CardDto {
                     id: row.get(0)?,
                     title: row.get(1)?,
                     amount: format!("{:.6}", row.get::<_, f64>(2)?),
-                    archived: row.get::<_, i32>(3)? != 0,
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
-                    archived_at: row.get(6)?,
+                    locked_amount: row.get::<_, Option<f64>>(3)?.map(|a| format!("{:.6}", a)),
+                    archived: row.get::<_, i32>(4)? != 0,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    archived_at: row.get(7)?,
                 })
             },
         )?;
@@ -493,6 +524,118 @@ pub fn recent_changes(limit: Option<i32>) -> Result<Vec<ChangeLogDto>, AppError>
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(changes)
+    })
+}
+
+#[tauri::command]
+pub fn archive_card(card_id: String) -> Result<CardDto, AppError> {
+    let now = now_iso();
+
+    with_db_mut(|conn| {
+        let tx = conn.transaction()?;
+
+        // Check card exists
+        tx.query_row(
+            "SELECT id FROM Card WHERE id = ?1",
+            params![card_id],
+            |_| Ok(()),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::CardNotFound(card_id.clone()),
+            _ => AppError::Database(e),
+        })?;
+
+        // Archive the card
+        tx.execute(
+            "UPDATE Card SET archived = 1, archivedAt = ?1, updatedAt = ?2 WHERE id = ?3",
+            params![now, now, card_id],
+        )?;
+
+        // Log the change
+        let changelog_id = generate_id();
+        let payload = serde_json::json!({ "reason": "user_archive" });
+        tx.execute(
+            "INSERT INTO ChangeLog (id, cardId, kind, payload, createdAt) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![changelog_id, card_id, "archived", payload.to_string(), now],
+        )?;
+
+        tx.commit()?;
+
+        // Return the updated card
+        let card = conn.query_row(
+            "SELECT id, title, amount, lockedAmount, archived, createdAt, updatedAt, archivedAt FROM Card WHERE id = ?1",
+            params![card_id],
+            |row| {
+                Ok(CardDto {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    amount: format!("{:.6}", row.get::<_, f64>(2)?),
+                    locked_amount: row.get::<_, Option<f64>>(3)?.map(|a| format!("{:.6}", a)),
+                    archived: row.get::<_, i32>(4)? != 0,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    archived_at: row.get(7)?,
+                })
+            },
+        )?;
+
+        Ok(card)
+    })
+}
+
+#[tauri::command]
+pub fn unarchive_card(card_id: String) -> Result<CardDto, AppError> {
+    let now = now_iso();
+
+    with_db_mut(|conn| {
+        let tx = conn.transaction()?;
+
+        // Check card exists
+        tx.query_row(
+            "SELECT id FROM Card WHERE id = ?1",
+            params![card_id],
+            |_| Ok(()),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::CardNotFound(card_id.clone()),
+            _ => AppError::Database(e),
+        })?;
+
+        // Unarchive the card
+        tx.execute(
+            "UPDATE Card SET archived = 0, archivedAt = NULL, updatedAt = ?1 WHERE id = ?2",
+            params![now, card_id],
+        )?;
+
+        // Log the change
+        let changelog_id = generate_id();
+        let payload = serde_json::json!({ "reason": "user_unarchive" });
+        tx.execute(
+            "INSERT INTO ChangeLog (id, cardId, kind, payload, createdAt) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![changelog_id, card_id, "unarchived", payload.to_string(), now],
+        )?;
+
+        tx.commit()?;
+
+        // Return the updated card
+        let card = conn.query_row(
+            "SELECT id, title, amount, lockedAmount, archived, createdAt, updatedAt, archivedAt FROM Card WHERE id = ?1",
+            params![card_id],
+            |row| {
+                Ok(CardDto {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    amount: format!("{:.6}", row.get::<_, f64>(2)?),
+                    locked_amount: row.get::<_, Option<f64>>(3)?.map(|a| format!("{:.6}", a)),
+                    archived: row.get::<_, i32>(4)? != 0,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                    archived_at: row.get(7)?,
+                })
+            },
+        )?;
+
+        Ok(card)
     })
 }
 

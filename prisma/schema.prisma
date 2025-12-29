@@ -7,15 +7,16 @@ datasource db {
 }
 
 model Card {
-    id         String      @id @default(cuid())
-    title      String?
-    amount     Float       @default(0)
-    createdAt  DateTime    @default(now())
-    updatedAt  DateTime    @updatedAt
-    archivedAt DateTime?
-    archived   Boolean     @default(false)
-    todos      Todo[]
-    changes    ChangeLog[]
+    id           String      @id @default(cuid())
+    title        String?
+    amount       Float       @default(0)
+    lockedAmount Float? // User-controlled balance, read-only for calculations
+    createdAt    DateTime    @default(now())
+    updatedAt    DateTime    @updatedAt
+    archivedAt   DateTime?
+    archived     Boolean     @default(false)
+    todos        Todo[]
+    changes      ChangeLog[]
 
     @@index([createdAt])
     @@index([archived])

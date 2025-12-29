@@ -14,6 +14,9 @@ pub fn init_db(app_data_dir: PathBuf) -> Result<(), AppError> {
 
     conn.execute_batch(include_str!("../migrations/init.sql"))?;
 
+    // Migration: Add lockedAmount column if it doesn't exist
+    let _ = conn.execute("ALTER TABLE Card ADD COLUMN lockedAmount REAL", []);
+
     DB.set(Mutex::new(conn))
         .map_err(|_| AppError::Internal("DB already initialized".into()))?;
 

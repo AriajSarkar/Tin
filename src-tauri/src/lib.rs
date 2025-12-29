@@ -10,6 +10,7 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -20,6 +21,7 @@ pub fn run() {
 
             tauri::async_runtime::spawn(archiver::start_archiver());
 
+            // Debug-only: Enable logging plugin
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -27,10 +29,20 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            // Debug-only: Open devtools on main window
+            #[cfg(debug_assertions)]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             list_cards,
+            list_archived_cards,
             get_card,
             create_card,
             update_card,
@@ -40,6 +52,8 @@ pub fn run() {
             delete_todo,
             search,
             recent_changes,
+            archive_card,
+            unarchive_card,
             archive_old_cards,
         ])
         .run(tauri::generate_context!())
