@@ -7,7 +7,6 @@ import org.gradle.api.logging.LogLevel
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.TaskAction
 import org.gradle.process.ExecOperations
-import org.gradle.process.ExecSpec
 
 abstract class BuildTask : DefaultTask() {
     @get:Inject abstract val execOps: ExecOperations
@@ -64,10 +63,10 @@ abstract class BuildTask : DefaultTask() {
         tauriArgs.addAll(listOf("--target", target))
 
         execOps
-                .exec { spec: ExecSpec ->
-                    spec.workingDir = File(project.projectDir, rootDirRel)
-                    spec.executable = executable
-                    spec.args = tauriArgs
+                .exec {
+                    workingDir = File(project.projectDir, rootDirRel)
+                    this.executable = executable
+                    args = tauriArgs
                 }
                 .assertNormalExitValue()
     }
