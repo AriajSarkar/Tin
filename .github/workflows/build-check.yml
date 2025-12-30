@@ -52,6 +52,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # CI optimization: Antivirus scanning is very slow for the target folder.
+      # Safe on ephemeral runners as they are destroyed after each run.
+      - name: Disable Windows Defender
+        run: Set-MpPreference -ExclusionPath ${{ github.workspace }}
+        shell: powershell
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -101,7 +107,7 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf mold
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -134,6 +140,9 @@ jobs:
 
       - name: Build Linux
         run: pnpm tauri build --bundles appimage
+        env:
+          # Use mold linker for faster linking
+          RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
 
   # ============================================
   # Build Android (Optimized for speed)
@@ -169,13 +178,7 @@ jobs:
             gradle-${{ runner.os }}-
 
       - name: Install Android NDK
-        run: |
-          if [ ! -d "$ANDROID_HOME/ndk/25.2.9519653" ]; then
-            echo "Installing NDK..."
-            sdkmanager --install "ndk;25.2.9519653" "build-tools;34.0.0" "platforms;android-34"
-          else
-            echo "NDK already cached, skipping install"
-          fi
+        run: sdkmanager --install "ndk;25.2.9519653" "build-tools;34.0.0" "platforms;android-34"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
