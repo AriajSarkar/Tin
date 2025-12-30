@@ -10,7 +10,7 @@ CARGO_TOML="$ROOT_DIR/src-tauri/Cargo.toml"
 PACKAGE_JSON="$ROOT_DIR/package.json"
 
 # Extract version from Cargo.toml
-VERSION=$(grep -m1 '^version' "$CARGO_TOML" | sed 's/version = "\([^"]*\)"/\1/')
+VERSION=$(grep -m1 '^version' "$CARGO_TOML" | sed 's/version = "\([^"]*\)"/\1/' | tr -d '\r')
 
 if [ -z "$VERSION" ]; then
     echo "❌ Could not find version in Cargo.toml"
