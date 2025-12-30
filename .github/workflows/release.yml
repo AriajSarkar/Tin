@@ -57,7 +57,7 @@ jobs:
             gradle-${{ runner.os }}-
 
       - name: Install Android NDK
-        run: sdkmanager --install "ndk;25.2.9519653" "build-tools;34.0.0" "platforms;android-34"
+        run: sdkmanager --install "ndk;27.3.13750724" "build-tools;34.0.0" "platforms;android-34"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -104,7 +104,7 @@ jobs:
       - name: Build Android APK (${{ matrix.arch }})
         run: pnpm tauri android build --apk true --target ${{ matrix.arch }}
         env:
-          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.3.13750724
 
       - name: Upload Android APK (${{ matrix.arch }})
         uses: actions/upload-artifact@v4

@@ -31,8 +31,15 @@ jobs:
             echo "✓ PR approved - running builds"
           # Build on PR from repo owner/collaborators (not first-time contributors)
           elif [ "${{ github.event_name }}" == "pull_request" ]; then
-            echo "should_build=true" >> $GITHUB_OUTPUT
-            echo "✓ PR opened/synced - running builds"
+            if [ "${{ github.event.pull_request.author_association }}" == "OWNER" ] || \
+               [ "${{ github.event.pull_request.author_association }}" == "MEMBER" ] || \
+               [ "${{ github.event.pull_request.author_association }}" == "COLLABORATOR" ]; then
+              echo "should_build=true" >> $GITHUB_OUTPUT
+              echo "✓ PR opened/synced from trusted actor - running builds"
+            else
+              echo "should_build=false" >> $GITHUB_OUTPUT
+              echo "⏭ Skipping builds for non-collaborator PR"
+            fi
           else
             echo "should_build=false" >> $GITHUB_OUTPUT
             echo "⏭ Skipping builds"
@@ -178,7 +185,7 @@ jobs:
             gradle-${{ runner.os }}-
 
       - name: Install Android NDK
-        run: sdkmanager --install "ndk;25.2.9519653" "build-tools;34.0.0" "platforms;android-34"
+        run: sdkmanager --install "ndk;27.3.13750724" "build-tools;34.0.0" "platforms;android-34"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -217,4 +224,4 @@ jobs:
       - name: Build Android (debug, ARM64 only)
         run: pnpm tauri android build --apk true --target aarch64 --debug
         env:
-          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.3.13750724
