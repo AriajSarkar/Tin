@@ -1,0 +1,227 @@
+name: Build Check
+
+# Runs full builds on PRs to verify builds work before merging
+# Triggered on PR approval or when review is requested/submitted
+
+on:
+  pull_request_review:
+    types: [submitted]
+  pull_request:
+    types: [opened, synchronize]
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Only run builds when PR is approved or on PR open/sync from first-party
+  check-approval:
+    name: Check Approval Status
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+    steps:
+      - name: Check if should build
+        id: check
+        run: |
+          # Build on approval
+          if [ "${{ github.event_name }}" == "pull_request_review" ] && [ "${{ github.event.review.state }}" == "approved" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "✓ PR approved - running builds"
+          # Build on PR from repo owner/collaborators (not first-time contributors)
+          elif [ "${{ github.event_name }}" == "pull_request" ]; then
+            if [ "${{ github.event.pull_request.author_association }}" == "OWNER" ] || \
+               [ "${{ github.event.pull_request.author_association }}" == "MEMBER" ] || \
+               [ "${{ github.event.pull_request.author_association }}" == "COLLABORATOR" ]; then
+              echo "should_build=true" >> $GITHUB_OUTPUT
+              echo "✓ PR opened/synced from trusted actor - running builds"
+            else
+              echo "should_build=false" >> $GITHUB_OUTPUT
+              echo "⏭ Skipping builds for non-collaborator PR"
+            fi
+          else
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            echo "⏭ Skipping builds"
+          fi
+
+  # ============================================
+  # Build Windows (Quick check)
+  # ============================================
+  build-windows:
+    name: Build Windows
+    needs: check-approval
+    if: needs.check-approval.outputs.should_build == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # CI optimization: Antivirus scanning is very slow for the target folder.
+      # Safe on ephemeral runners as they are destroyed after each run.
+      - name: Disable Windows Defender
+        run: Set-MpPreference -ExclusionPath ${{ github.workspace }}
+        shell: powershell
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Configure sccache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: windows-nsis-check
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Windows
+        run: pnpm tauri build --bundles nsis
+
+  # ============================================
+  # Build Linux
+  # ============================================
+  build-linux:
+    name: Build Linux
+    needs: check-approval
+    if: needs.check-approval.outputs.should_build == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf mold
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Configure sccache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: linux-appimage-check
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Linux
+        run: pnpm tauri build --bundles appimage
+        env:
+          # Use mold linker for faster linking
+          RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
+
+  # ============================================
+  # Build Android (Optimized for speed)
+  # ============================================
+  build-android:
+    name: Build Android
+    needs: check-approval
+    if: needs.check-approval.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Install Android NDK
+        run: sdkmanager --install "ndk;27.3.13750724" "build-tools;34.0.0" "platforms;android-34"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # ARM64 only for faster builds (covers 95%+ of modern devices)
+          targets: aarch64-linux-android
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Configure sccache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          # Include android target in cache key
+          key: android-arm64
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # For PR builds, we build debug APK - no signing required
+      - name: Build Android (debug, ARM64 only)
+        run: pnpm tauri android build --apk true --target aarch64 --debug
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.3.13750724
