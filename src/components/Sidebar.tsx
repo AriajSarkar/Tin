@@ -23,6 +23,17 @@ interface SidebarProps {
     onTabChange: (tab: "recent" | "saved") => void;
 }
 
+/**
+ * Render a left-side sidebar panel containing navigation tabs, secondary actions, a theme toggle, and a footer with a GitHub link.
+ *
+ * The panel supports drag-to-close, backdrop click to close, and adapts its theme icon after mount to avoid hydration mismatch.
+ *
+ * @param isOpen - Whether the sidebar is currently open and visible
+ * @param onClose - Callback invoked to close the sidebar
+ * @param activeTab - Currently selected primary tab, either `"recent"` or `"saved"`
+ * @param onTabChange - Callback invoked with the new primary tab when a tab is selected
+ * @returns A JSX element representing the sidebar panel
+ */
 export function Sidebar({ isOpen, onClose, activeTab, onTabChange }: SidebarProps) {
     const { theme, setTheme, resolvedTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
