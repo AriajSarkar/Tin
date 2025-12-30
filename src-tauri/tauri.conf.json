@@ -2,13 +2,12 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Tin",
   "mainBinaryName": "Tin",
-  "version": "0.1.9",
   "identifier": "com.ariaj.tin",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
     "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "beforeBuildCommand": "pnpm version:sync && pnpm build"
   },
   "app": {
     "windows": [

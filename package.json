@@ -18,6 +18,7 @@
     "check": "pnpm lint:rust && pnpm test",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
+    "version:sync": "bash scripts/sync-version.sh",
     "tauri:build": "tauri build"
   },
   "dependencies": {

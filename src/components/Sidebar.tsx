@@ -14,6 +14,7 @@ import {
     RiComputerLine,
 } from "@remixicon/react";
 import { colors } from "@/styles/tokens";
+import packageJson from "../../package.json";
 
 interface SidebarProps {
     isOpen: boolean;
@@ -203,7 +204,7 @@ export function Sidebar({ isOpen, onClose, activeTab, onTabChange }: SidebarProp
                                 <span className="hidden sm:inline">Github Project</span>
                             </button>
                             <div className="text-xs" style={{ color: colors.text.tertiary }}>
-                                v0.1.2
+                                v{packageJson.version}
                             </div>
                         </div>
                     </motion.aside>
