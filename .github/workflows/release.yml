@@ -10,11 +10,27 @@ env:
 
 jobs:
   # ============================================
-  # Build Android APK (Signed)
+  # Build Android APK (Parallel Matrix Build)
   # ============================================
-  build-android:
-    name: Build Android APK
+  build-android-arch:
+    name: Build Android (${{ matrix.arch }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            target: aarch64-linux-android
+            abi: arm64-v8a
+          - arch: armv7
+            target: armv7-linux-androideabi
+            abi: armeabi-v7a
+          - arch: i686
+            target: i686-linux-android
+            abi: x86
+          - arch: x86_64
+            target: x86_64-linux-android
+            abi: x86_64
     
     steps:
       - name: Checkout
@@ -40,11 +56,25 @@ jobs:
           restore-keys: |
             android-sdk-${{ runner.os }}-
 
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ matrix.arch }}-
+            gradle-${{ runner.os }}-
+
       - name: Install Android NDK
         run: |
-          sdkmanager --install "ndk;25.2.9519653" "build-tools;34.0.0" "platforms;android-34"
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
+          if [ ! -d "$ANDROID_HOME/ndk/25.2.9519653" ]; then
+            echo "Installing NDK..."
+            sdkmanager --install "ndk;25.2.9519653" "build-tools;34.0.0" "platforms;android-34"
+          else
+            echo "NDK already cached, skipping install"
+          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -58,12 +88,21 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          targets: ${{ matrix.target }}
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Configure sccache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          key: android-${{ matrix.arch }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -79,16 +118,41 @@ jobs:
           base64 -d <<< "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" > $RUNNER_TEMP/keystore.jks
           echo "storeFile=$RUNNER_TEMP/keystore.jks" >> key.properties
 
-      - name: Build Android APK
-        run: pnpm tauri android build --apk true
+      - name: Build Android APK (${{ matrix.arch }})
+        run: pnpm tauri android build --apk true --target ${{ matrix.arch }}
         env:
-          NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
 
-      - name: Upload Android APK
+      - name: Upload Android APK (${{ matrix.arch }})
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk-${{ matrix.arch }}
+          path: src-tauri/gen/android/app/build/outputs/apk/*/release/*.apk
+
+  # ============================================
+  # Merge Android APKs
+  # ============================================
+  build-android:
+    name: Merge Android APKs
+    runs-on: ubuntu-latest
+    needs: build-android-arch
+    
+    steps:
+      - name: Download all Android APKs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: android-apk-*
+          path: apks
+          merge-multiple: true
+
+      - name: List APKs
+        run: find apks -name "*.apk" -type f
+
+      - name: Upload merged Android APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
+          path: apks/**/*.apk
 
   # ============================================
   # Build Windows NSIS Installer

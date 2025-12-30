@@ -115,7 +115,7 @@ jobs:
         run: pnpm tauri build --bundles appimage
 
   # ============================================
-  # Build Android
+  # Build Android (Optimized for speed)
   # ============================================
   build-android:
     name: Build Android
@@ -147,11 +147,24 @@ jobs:
           restore-keys: |
             android-sdk-${{ runner.os }}-
 
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
       - name: Install Android NDK
         run: |
-          sdkmanager --install "ndk;25.2.9519653" "build-tools;34.0.0" "platforms;android-34"
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
+          if [ ! -d "$ANDROID_HOME/ndk/25.2.9519653" ]; then
+            echo "Installing NDK..."
+            sdkmanager --install "ndk;25.2.9519653" "build-tools;34.0.0" "platforms;android-34"
+          else
+            echo "NDK already cached, skipping install"
+          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -165,18 +178,29 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          # ARM64 only for faster builds (covers 95%+ of modern devices)
+          targets: aarch64-linux-android
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Configure sccache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          # Include android target in cache key
+          key: android-arm64
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # For PR builds, we don't sign - just verify it compiles
-      - name: Build Android (unsigned)
-        run: pnpm tauri android build --apk true
+      # For PR builds, we build debug APK - no signing required
+      - name: Build Android (debug, ARM64 only)
+        run: pnpm tauri android build --apk true --target aarch64 --debug
         env:
-          NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/25.2.9519653
