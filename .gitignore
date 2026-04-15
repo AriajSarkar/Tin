@@ -304,3 +304,6 @@ prisma/dev.db-journal
 _signing/
 *.jks
 *.keystore
+
+# Local build output folder (created by build scripts)
+release/

@@ -7,39 +7,39 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUSTC_WRAPPER: sccache
+  SCCACHE_GHA_ENABLED: 'true'
 
 jobs:
   # ============================================
-  # Build Android APK (Parallel Matrix Build)
+  # Build Android APKs (Per-arch matrix)
   # ============================================
   build-android-arch:
     name: Build Android (${{ matrix.arch }})
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     strategy:
+      fail-fast: false
       matrix:
         include:
           - arch: aarch64
             target: aarch64-linux-android
-            abi: arm64-v8a
           - arch: armv7
             target: armv7-linux-androideabi
-            abi: armeabi-v7a
           - arch: i686
             target: i686-linux-android
-            abi: x86
           - arch: x86_64
             target: x86_64-linux-android
-            abi: x86_64
-    
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
       - name: Setup Android SDK
@@ -56,17 +56,17 @@ jobs:
             gradle-${{ runner.os }}-${{ matrix.arch }}-
             gradle-${{ runner.os }}-
 
-      - name: Install Android NDK
-        run: sdkmanager --install "ndk;27.3.13750724" "build-tools;34.0.0" "platforms;android-34"
+      - name: Install Android NDK + Build Tools
+        run: sdkmanager --install "ndk;27.3.13750724" "build-tools;34.0.0" "platforms;android-36"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
-          cache: 'pnpm'
+          cache: pnpm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -76,146 +76,211 @@ jobs:
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
 
-      - name: Configure sccache
-        run: |
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          key: android-${{ matrix.arch }}
+          cache-targets: false
+          key: release-android-${{ matrix.arch }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Setup Android signing per Tauri official docs
-      # https://tauri.app/distribute/sign/android/
       - name: Setup Android signing
         run: |
           cd src-tauri/gen/android/app
           echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > key.properties
           echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> key.properties
           echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> key.properties
-          base64 -d <<< "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" > $RUNNER_TEMP/keystore.jks
+          base64 -d <<< "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" > "$RUNNER_TEMP/keystore.jks"
           echo "storeFile=$RUNNER_TEMP/keystore.jks" >> key.properties
 
       - name: Build Android APK (${{ matrix.arch }})
-        run: pnpm tauri android build --apk true --target ${{ matrix.arch }}
-        env:
-          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.3.13750724
+        run: NDK_HOME="$ANDROID_HOME/ndk/27.3.13750724" bash scripts/build-android.sh "${{ matrix.arch }}"
+
+      - name: sccache stats
+        run: sccache --show-stats || true
 
       - name: Upload Android APK (${{ matrix.arch }})
         uses: actions/upload-artifact@v4
         with:
           name: android-apk-${{ matrix.arch }}
-          path: src-tauri/gen/android/app/build/outputs/apk/*/release/*.apk
+          path: release/**/*.apk
 
   # ============================================
-  # Merge Android APKs
+  # Build Android Universal APK
   # ============================================
-  build-android:
-    name: Merge Android APKs
+  build-android-universal:
+    name: Build Android (universal)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: build-android-arch
-    
-    steps:
-      - name: Download all Android APKs
-        uses: actions/download-artifact@v4
-        with:
-          pattern: android-apk-*
-          path: apks
-          merge-multiple: true
+    timeout-minutes: 90
 
-      - name: List APKs
-        run: find apks -name "*.apk" -type f
-
-      - name: Upload merged Android APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-apk
-          path: apks/**/*.apk
-
-  # ============================================
-  # Build Windows NSIS Installer
-  # ============================================
-  build-windows:
-    name: Build Windows NSIS
-    runs-on: windows-latest
-    timeout-minutes: 60
-    
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      # CI optimization: Antivirus scanning is very slow for the target folder.
-      # Safe on ephemeral runners as they are destroyed after each run.
-      - name: Disable Windows Defender
-        run: Set-MpPreference -ExclusionPath ${{ github.workspace }}
-        shell: powershell
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-universal-${{ hashFiles('src-tauri/gen/android/**/*.gradle*', 'src-tauri/gen/android/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-universal-
+            gradle-${{ runner.os }}-
+
+      - name: Install Android NDK + Build Tools
+        run: sdkmanager --install "ndk;27.3.13750724" "build-tools;34.0.0" "platforms;android-36"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
-          cache: 'pnpm'
+          cache: pnpm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
 
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
-
-      - name: Configure sccache
-        run: |
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          key: windows-nsis
+          cache-targets: false
+          key: release-android-universal
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Windows NSIS
-        run: pnpm tauri build --bundles nsis
+      - name: Setup Android signing
+        run: |
+          cd src-tauri/gen/android/app
+          echo "keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}" > key.properties
+          echo "storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> key.properties
+          echo "keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}" >> key.properties
+          base64 -d <<< "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" > "$RUNNER_TEMP/keystore.jks"
+          echo "storeFile=$RUNNER_TEMP/keystore.jks" >> key.properties
 
-      # Upload unsigned artifact first (required by SignPath)
-      - name: Upload Unsigned Windows Installer
-        id: upload-unsigned
+      - name: Build Android universal APK
+        run: NDK_HOME="$ANDROID_HOME/ndk/27.3.13750724" bash scripts/build-android.sh all
+
+      - name: sccache stats
+        run: sccache --show-stats || true
+
+      - name: Upload Android universal APK
         uses: actions/upload-artifact@v4
         with:
-          name: windows-nsis-unsigned
-          path: src-tauri/target/release/bundle/nsis/*.exe
+          name: android-apk-universal
+          path: release/**/*.apk
 
-      # ============================================
-      # SignPath Code Signing
-      # ============================================
-      - name: Sign with SignPath
-        id: signpath
-        uses: signpath/github-action-submit-signing-request@v2
+  # ============================================
+  # Build Windows NSIS (x64 + ARM64 in parallel)
+  # ============================================
+  build-windows-arch:
+    name: Build Windows (${{ matrix.label }})
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: x64
+            target: x86_64-pc-windows-msvc
+          - label: arm64
+            target: aarch64-pc-windows-msvc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Disable Windows Defender
+        run: Set-MpPreference -ExclusionPath ${{ github.workspace }}
+        shell: powershell
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
-          api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
-          organization-id: '${{ secrets.SIGNPATH_ORGANIZATION_ID }}'
-          project-slug: 'Tin'
-          signing-policy-slug: 'Tin'
-          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
-          wait-for-completion: true
-          output-artifact-directory: 'signed-artifacts'
+          node-version: '20'
+          cache: pnpm
 
-      - name: Upload Windows Installer
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-targets: false
+          key: release-windows-${{ matrix.label }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Windows NSIS (${{ matrix.label }})
+        run: bash scripts/build-windows.sh "${{ matrix.target }}"
+        shell: bash
+
+      - name: Sign Windows installer (standard certificate if configured)
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:WINDOWS_CERT_PASSWORD)) {
+            Write-Host "No standard Windows signing certificate configured; installer remains unsigned."
+            exit 0
+          }
+
+          $certPath = Join-Path $env:RUNNER_TEMP "tin-signing-cert.pfx"
+          [System.IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+
+          $exeFiles = Get-ChildItem -Path "release" -Filter *.exe -Recurse
+          if ($exeFiles.Count -eq 0) {
+            throw "No NSIS installer found in release folder."
+          }
+
+          foreach ($exe in $exeFiles) {
+            Write-Host "Signing $($exe.FullName)"
+            & signtool sign /fd SHA256 /tr "http://timestamp.digicert.com" /td SHA256 /f $certPath /p $env:WINDOWS_CERT_PASSWORD $exe.FullName
+            if ($LASTEXITCODE -ne 0) {
+              throw "signtool failed for $($exe.FullName)"
+            }
+          }
+
+      - name: sccache stats
+        run: sccache --show-stats || true
+        shell: bash
+
+      - name: Upload Windows installer (${{ matrix.label }})
         uses: actions/upload-artifact@v4
         with:
-          name: windows-nsis
-          path: signed-artifacts/*.exe
+          name: windows-nsis-${{ matrix.label }}
+          path: release/**/*.exe
 
   # ============================================
   # Build Linux AppImage/deb
@@ -223,11 +288,11 @@ jobs:
   build-linux:
     name: Build Linux
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
-    
+    timeout-minutes: 90
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install Linux dependencies
         run: |
@@ -235,13 +300,13 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf mold
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
-          cache: 'pnpm'
+          cache: pnpm
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -249,123 +314,84 @@ jobs:
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
 
-      - name: Configure sccache
-        run: |
-          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
-
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          key: linux-appimage
+          cache-targets: false
+          key: release-linux
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Linux AppImage and deb
-        run: pnpm tauri build --bundles appimage,deb
+      - name: Build Linux bundles
+        run: bash scripts/build-linux.sh appimage,deb
         env:
-          # Use mold linker for faster linking
-          RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
+          RUSTFLAGS: '-C link-arg=-fuse-ld=mold'
+
+      - name: sccache stats
+        run: sccache --show-stats || true
 
       - name: Upload Linux AppImage
         uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
-          path: src-tauri/target/release/bundle/appimage/*.AppImage
+          path: release/**/*.AppImage
 
       - name: Upload Linux deb
         uses: actions/upload-artifact@v4
         with:
           name: linux-deb
-          path: src-tauri/target/release/bundle/deb/*.deb
+          path: release/**/*.deb
 
   # ============================================
-  # Build macOS DMG (Commented - requires Apple Developer Account)
+  # Build macOS DMG (unsigned)
   # ============================================
-  # build-macos:
-  #   name: Build macOS DMG
-  #   runs-on: macos-latest
-  #   
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Setup pnpm
-  #       uses: pnpm/action-setup@v4
-  #       with:
-  #         version: 10
-  #
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: '20'
-  #         cache: 'pnpm'
-  #
-  #     - name: Setup Rust
-  #       uses: dtolnay/rust-toolchain@stable
-  #
-  #     - name: Cache Cargo
-  #       uses: Swatinem/rust-cache@v2
-  #       with:
-  #         workspaces: src-tauri
-  #
-  #     - name: Install dependencies
-  #       run: pnpm install --frozen-lockfile
-  #
-  #     - name: Build macOS DMG
-  #       run: pnpm tauri build --bundles dmg
-  #
-  #     - name: Upload macOS DMG
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: macos-dmg
-  #         path: src-tauri/target/release/bundle/dmg/*.dmg
+  build-macos:
+    name: Build macOS (unsigned)
+    runs-on: macos-latest
+    timeout-minutes: 90
 
-  # ============================================
-  # Build iOS IPA (Commented - requires Apple Developer Account)
-  # ============================================
-  # build-ios:
-  #   name: Build iOS IPA
-  #   runs-on: macos-latest
-  #   
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v4
-  #
-  #     - name: Setup pnpm
-  #       uses: pnpm/action-setup@v4
-  #       with:
-  #         version: 10
-  #
-  #     - name: Setup Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: '20'
-  #         cache: 'pnpm'
-  #
-  #     - name: Setup Rust
-  #       uses: dtolnay/rust-toolchain@stable
-  #       with:
-  #         targets: aarch64-apple-ios,x86_64-apple-ios
-  #
-  #     - name: Cache Cargo
-  #       uses: Swatinem/rust-cache@v2
-  #       with:
-  #         workspaces: src-tauri
-  #
-  #     - name: Install dependencies
-  #       run: pnpm install --frozen-lockfile
-  #
-  #     - name: Build iOS IPA
-  #       run: pnpm tauri ios build
-  #
-  #     - name: Upload iOS IPA
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: ios-ipa
-  #         path: src-tauri/gen/apple/build/**/*.ipa
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-targets: false
+          key: release-macos
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build macOS DMG (unsigned)
+        run: bash scripts/build-macos.sh
+
+      - name: sccache stats
+        run: sccache --show-stats || true
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: release/**/*.dmg
 
   # ============================================
   # Create GitHub Release
@@ -374,26 +400,25 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [build-android, build-windows, build-linux]
-    # Add build-macos, build-ios to needs when enabled
-    
+    needs: [build-android-arch, build-android-universal, build-windows-arch, build-linux, build-macos]
+
     permissions:
       contents: write
-    
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Download Android APK
+      - name: Download all Android APKs
         uses: actions/download-artifact@v4
         with:
-          name: android-apk
+          pattern: android-apk-*
           path: artifacts/android
 
-      - name: Download Windows Installer
+      - name: Download all Windows installers
         uses: actions/download-artifact@v4
         with:
-          name: windows-nsis
+          pattern: windows-nsis-*
           path: artifacts/windows
 
       - name: Download Linux AppImage
@@ -408,23 +433,26 @@ jobs:
           name: linux-deb
           path: artifacts/linux
 
-      # Uncomment when macOS build is enabled
-      # - name: Download macOS DMG
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: macos-dmg
-      #     path: artifacts/macos
+      - name: Download macOS DMG
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-dmg
+          path: artifacts/macos
 
-      # Uncomment when iOS build is enabled
-      # - name: Download iOS IPA
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: ios-ipa
-      #     path: artifacts/ios
+      - name: List release artifacts
+        run: |
+          echo "=== Android ==="
+          find artifacts/android -type f -name "*.apk" || true
+          echo "=== Windows ==="
+          find artifacts/windows -type f -name "*.exe" || true
+          echo "=== Linux ==="
+          find artifacts/linux -type f \( -name "*.AppImage" -o -name "*.deb" \) || true
+          echo "=== macOS ==="
+          find artifacts/macos -type f -name "*.dmg" || true
 
       - name: Get version from tag
         id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -434,10 +462,38 @@ jobs:
           draft: false
           prerelease: false
           generate_release_notes: true
+          body: |
+            ## Download matrix
+
+            ### Android APKs (all variants)
+            - ARM64 (`arm64-v8a`)
+            - ARMv7 (`armeabi-v7a`)
+            - x86
+            - x86_64
+            - Universal APK
+
+            ### Windows (NSIS)
+            - x64 installer
+            - ARM64 installer
+
+            ### Linux
+            - AppImage
+            - Debian package (`.deb`)
+
+            ### macOS
+            - Unsigned DMG build (Gatekeeper warning expected)
+
+            ## Install notices
+
+            - **Windows SmartScreen blue warning**:
+              If you see **"Windows protected your PC"**, click **More info** then **Run anyway**.
+            - **macOS Gatekeeper warning (unsigned app)**:
+              Right-click the app and choose **Open**, then click **Open** again.
           files: |
-            artifacts/android/*.apk
-            artifacts/windows/*.exe
-            artifacts/linux/*.AppImage
-            artifacts/linux/*.deb
+            artifacts/android/**/*.apk
+            artifacts/windows/**/*.exe
+            artifacts/linux/**/*.AppImage
+            artifacts/linux/**/*.deb
+            artifacts/macos/**/*.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
