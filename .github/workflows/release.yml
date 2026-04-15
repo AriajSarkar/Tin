@@ -284,12 +284,22 @@ jobs:
           path: release/**/*.exe
 
   # ============================================
-  # Build Linux AppImage/deb
+  # Build Linux bundles (parallel matrix)
   # ============================================
   build-linux:
-    name: Build Linux
+    name: Build Linux (${{ matrix.bundle }})
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - bundle: appimage
+            artifact_name: linux-appimage
+            artifact_path: release/**/*.AppImage
+          - bundle: deb
+            artifact_name: linux-deb
+            artifact_path: release/**/*.deb
 
     steps:
       - name: Checkout
@@ -320,30 +330,24 @@ jobs:
         with:
           workspaces: src-tauri
           cache-targets: false
-          key: release-linux
+          key: release-linux-${{ matrix.bundle }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Linux bundles
-        run: bash scripts/build-linux.sh appimage,deb
+      - name: Build Linux bundle (${{ matrix.bundle }})
+        run: bash scripts/build-linux.sh "${{ matrix.bundle }}"
         env:
           RUSTFLAGS: '-C link-arg=-fuse-ld=mold'
 
       - name: sccache stats
         run: sccache --show-stats || true
 
-      - name: Upload Linux AppImage
+      - name: Upload Linux artifact (${{ matrix.bundle }})
         uses: actions/upload-artifact@v4
         with:
-          name: linux-appimage
-          path: release/**/*.AppImage
-
-      - name: Upload Linux deb
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-deb
-          path: release/**/*.deb
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
 
   # ============================================
   # Build macOS DMG (unsigned)
