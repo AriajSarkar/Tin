@@ -9,11 +9,48 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 RELEASE_DIR="$ROOT_DIR/release"
 ARCH="${1:-all}"
+CARGO_TOML="$ROOT_DIR/src-tauri/Cargo.toml"
+TAURI_PROPERTIES="$ROOT_DIR/src-tauri/gen/android/app/tauri.properties"
+
+APP_VERSION=$(grep -m1 '^version' "$CARGO_TOML" | sed 's/version = "\([^"]*\)"/\1/' | tr -d '\r')
+if [ -z "$APP_VERSION" ]; then
+  echo "❌ Could not detect app version from src-tauri/Cargo.toml"
+  exit 1
+fi
+
+IFS='.' read -r MAJOR MINOR PATCH_RAW <<< "$APP_VERSION"
+PATCH="${PATCH_RAW%%[^0-9]*}"
+if ! [[ "$MAJOR" =~ ^[0-9]+$ && "$MINOR" =~ ^[0-9]+$ && "$PATCH" =~ ^[0-9]+$ ]]; then
+  echo "❌ Unsupported semver format in Cargo.toml: $APP_VERSION"
+  exit 1
+fi
+
+# Keep Android versionCode monotonic and update-safe.
+# Example: 0.1.9 -> 1009, 0.1.10 -> 1010
+ANDROID_VERSION_CODE=$((MAJOR * 1000000 + MINOR * 1000 + PATCH))
+
+mkdir -p "$(dirname "$TAURI_PROPERTIES")"
+cat > "$TAURI_PROPERTIES" <<EOF
+tauri.android.versionName=$APP_VERSION
+tauri.android.versionCode=$ANDROID_VERSION_CODE
+EOF
+echo "==> Android version metadata: versionName=$APP_VERSION versionCode=$ANDROID_VERSION_CODE"
+
+JNI_LIBS_DIR="$ROOT_DIR/src-tauri/gen/android/app/src/main/jniLibs"
+if [ -d "$JNI_LIBS_DIR" ]; then
+  echo "==> Cleaning stale JNI libs: $JNI_LIBS_DIR"
+  rm -rf "$JNI_LIBS_DIR"
+fi
 
 # Optional version label for artifact names.
 # CI tag builds provide GITHUB_REF_NAME (e.g. v0.1.10), and local builds can
 # override with TIN_VERSION if desired.
-VERSION="${TIN_VERSION:-${GITHUB_REF_NAME#v}}"
+TAG_VERSION="${GITHUB_REF_NAME:-}"
+TAG_VERSION="${TAG_VERSION#v}"
+VERSION="${TIN_VERSION:-$TAG_VERSION}"
+if [ -z "$VERSION" ]; then
+  VERSION="$APP_VERSION"
+fi
 VERSION_PREFIX=""
 if [ -n "$VERSION" ]; then
   VERSION_PREFIX="${VERSION}_"
